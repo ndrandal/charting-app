@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────────────────────────────
+# C++ Backend (CMake + build artifacts)
+# ─────────────────────────────────────────────────────────────────
+
+# Build directory
+/backend/build/
+
+# CMake cache, log, and temporary files
+/backend/CMakeFiles/
+/backend/CMakeCache.txt
+/backend/cmake_install.cmake
+/backend/Makefile
+/backend/*.dir/
+backend/*.obj
+backend/*.pch
+backend/*.o
+backend/*.exe
+backend/*.log
+
+# If using Visual Studio
+# *.sln
+# *.vcxproj*
+# *_i.obj
+# *_pdb.*
+
+# ─────────────────────────────────────────────────────────────────
+# TypeScript Frontend (Node + dist)
+/dist/
+/frontend/dist/
+
+# Node modules
+/frontend/node_modules/
+
+/frontend/package-lock.json
+/frontend/yarn.lock
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor folders and files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# MacOS / Linux OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# ─────────────────────────────────────────────────────────────────
+# JetBrains Rider (if ever used for C# or Unity parts)
+.idea/
+*.sln.iml
+
+# npm package build outputs (if any other)
+/dist/
