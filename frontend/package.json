@@ -1,15 +1,23 @@
 {
-  "name": "frontend",
+  "name": "charting-frontend",
   "version": "1.0.0",
-  "main": "index.js",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "gl-matrix": "^3.4.3"
+  },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@types/gl-matrix": "^2.4.5",
+    "typescript": "^5.8.3",
+    "react-scripts": "^5.0.1"
   }
 }
