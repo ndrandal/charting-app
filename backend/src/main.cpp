@@ -1,38 +1,64 @@
-#include <boost/beast/core.hpp>
-#include <boost/beast/websocket.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/strand.hpp>
-#include <boost/asio/signal_set.hpp>
+// backend/src/main.cpp
+
+// Tell WebSocket++ to use standalone Asio
+#define ASIO_STANDALONE
+
+#include <websocketpp/config/asio_no_tls.hpp>
+#include <websocketpp/server.hpp>
+
 #include <iostream>
 #include <string>
 #include <thread>
-#include <vector>
-#include "Protocol.hpp" // Your RapidJSON-based drawSeries
+#include "Protocol.hpp" // Your RapidJSON-based DrawSeriesCommand
 
-namespace beast     = boost::beast;         // from <boost/beast.hpp>
-namespace http      = beast::http;          // from <boost/beast/http.hpp>
-namespace websocket = beast::websocket;     // from <boost/beast/websocket.hpp>
-namespace net       = boost::asio;          // from <boost/asio.hpp>
-using tcp           = boost::asio::ip::tcp; // from <boost/asio/ip/tcp.hpp>
+using websocketpp::connection_hdl;
+using Server = websocketpp::server<websocketpp::config::asio>;
 
-//------------------------------------------------------------------------------
+/* … rest of your existing WebSocket++ server code … */
 
-void do_session(tcp::socket socket) {
-    try {
-        // Construct the WebSocket stream around the socket
-        websocket::stream<tcp::socket> ws{std::move(socket)};
+using websocketpp::connection_hdl;
+using Server = websocketpp::server<websocketpp::config::asio>;
 
-        // Accept the WebSocket handshake
-        ws.accept();
+// ------------------------------------------------------------
+// A simple WebSocket++ server that, upon each connection,
+// sends a single drawSeries JSON message, then logs any
+// incoming text frames. No TLS, no SSL (asio_no_tls).
+// ------------------------------------------------------------
 
-        std::cout << "[Boost.Beast] Client connected\n";
+class ChartServer {
+public:
+    ChartServer(uint16_t port) : m_port(port) {
+        // Initialize Asio
+        m_server.init_asio();
 
-        // Create and send a single drawSeries message
+        // Register handlers
+        m_server.set_open_handler(std::bind(&ChartServer::on_open, this, std::placeholders::_1));
+        m_server.set_message_handler(std::bind(&ChartServer::on_message, this, std::placeholders::_1, std::placeholders::_2));
+
+        // Listen on the specified port
+        m_server.listen(m_port);
+        m_server.start_accept();
+
+        std::cout << "[WebSocket++] Listening on port " << m_port << std::endl;
+    }
+
+    // Run the ASIO io_context loop
+    void run() {
+        m_server.run();
+    }
+
+private:
+    // When a new client connects:
+    void on_open(connection_hdl hdl) {
+        std::cout << "[WebSocket++] Client connected" << std::endl;
+
+        // Build a single drawSeries message
         DrawSeriesCommand cmd;
         cmd.type = "drawSeries";
         cmd.pane = "pricePane";
         cmd.seriesId = "price";
         cmd.style = { "line", "#22ff88", "", "", 2 };
+
         for (int i = 0; i < 60; ++i) {
             float t = i / 59.0f;
             float v = 0.5f + 0.5f * std::sin(2.0f * 3.14159f * t);
@@ -41,54 +67,34 @@ void do_session(tcp::socket socket) {
             cmd.vertices.push_back(xNorm);
             cmd.vertices.push_back(yNorm);
         }
-        std::string message = cmd.toJsonString();
-        ws.write(net::buffer(message));
 
-        // Read messages in a loop (echoing them back or just logging)
-        for (;;) {
-            beast::flat_buffer buffer;
-            ws.read(buffer);
-            std::string received = beast::buffers_to_string(buffer.data());
-            std::cout << "[Boost.Beast] Received: " << received << "\n";
-            // (Optionally, echo back:)
-            // ws.text(ws.got_text());
-            // ws.write(buffer.data());
-        }
+        std::string payload = cmd.toJsonString();
 
-    } catch (beast::system_error const& se) {
-        // This indicates that the session was closed
-        std::cerr << "[Boost.Beast] WebSocket closed: " << se.code().message() << "\n";
-    } catch (std::exception const& e) {
-        std::cerr << "[Boost.Beast] Exception: " << e.what() << "\n";
+        // Send the JSON payload as a text message
+        m_server.send(hdl, payload, websocketpp::frame::opcode::text);
     }
-}
 
-//------------------------------------------------------------------------------
+    // When we receive a message from a client:
+    void on_message(connection_hdl hdl, Server::message_ptr msg) {
+        std::string incoming = msg->get_payload();
+        std::cout << "[WebSocket++] Received: " << incoming << std::endl;
 
-int main(int argc, char* argv[]) {
+        // (Optionally echo back)
+        // m_server.send(hdl, incoming, websocketpp::frame::opcode::text);
+    }
+
+    Server m_server;
+    uint16_t m_port;
+};
+
+int main() {
     try {
-        auto const address = net::ip::make_address("0.0.0.0");
-        unsigned short port = 9001;
-
-        net::io_context ioc{1};
-
-        // Capture SIGINT and SIGTERM to allow a clean shutdown
-        net::signal_set signals(ioc, SIGINT, SIGTERM);
-        signals.async_wait([&](auto, auto){ ioc.stop(); });
-
-        tcp::acceptor acceptor{ioc, {address, port}};
-        std::cout << "[Boost.Beast] Listening on port " << port << "\n";
-
-        for (;;) {
-            tcp::socket socket{ioc};
-            acceptor.accept(socket);
-            std::thread{std::bind(&do_session, std::move(socket))}.detach();
-        }
-
-    } catch (std::exception const& e) {
-        std::cerr << "[Boost.Beast] Fatal error: " << e.what() << "\n";
+        constexpr uint16_t port = 9001;
+        ChartServer server(port);
+        server.run();
+    } catch (const std::exception &e) {
+        std::cerr << "[WebSocket++] Fatal error: " << e.what() << std::endl;
         return EXIT_FAILURE;
     }
-
     return EXIT_SUCCESS;
 }
