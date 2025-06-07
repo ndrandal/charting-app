@@ -22,7 +22,26 @@ int main() {
     RenderEngine engine;
     auto cmds = engine.generateDrawCommands(data);
     // Serialize with RapidJSON as before:
-    std::string payload = ""/* your rapidjson batch.dump() */;
+    rapidjson::Document doc;
+    doc.SetObject();
+    auto& alloc = doc.GetAllocator();
+
+    doc.AddMember("type",
+                  rapidjson::Value("drawCommands", alloc),
+                  alloc);
+
+    rapidjson::Value arr(rapidjson::kArrayType);
+    for (auto& cmd : cmds) {
+        rapidjson::Value obj(rapidjson::kObjectType);
+        cmd.serialize(obj, alloc);      // draws from Protocol.hpp
+        arr.PushBack(obj, alloc);
+    }
+    doc.AddMember("commands", arr, alloc);
+
+    rapidjson::StringBuffer sb;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+    doc.Accept(writer);
+    std::string payload = sb.GetString();
 
     // 2) Set up a listening socket
     tcp::acceptor acceptor{ioc, {tcp::v4(), 9001}};

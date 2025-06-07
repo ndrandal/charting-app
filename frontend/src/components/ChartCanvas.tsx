@@ -22,10 +22,10 @@ interface Props {
 }
 
 const ChartCanvas: React.FC<Props> = ({ wsUrl }) => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const glRef = useRef<WebGL2RenderingContext | null>(null);
+  const canvasRef  = useRef<HTMLCanvasElement | null>(null);
+  const glRef      = useRef<WebGL2RenderingContext | null>(null);
   const programRef = useRef<WebGLProgram | null>(null);
-  const bufferRef = useRef<WebGLBuffer | null>(null);
+  const bufferRef     = useRef<WebGLBuffer | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -37,6 +37,9 @@ const ChartCanvas: React.FC<Props> = ({ wsUrl }) => {
       return;
     }
     glRef.current = gl;
+
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
     // Compile shader helper
     const compileShader = (source: string, type: number): WebGLShader => {
@@ -51,6 +54,7 @@ const ChartCanvas: React.FC<Props> = ({ wsUrl }) => {
       }
       return shader;
     };
+
 
     // Link program
     const vertexShader = compileShader(vertexShaderSource, gl.VERTEX_SHADER);
