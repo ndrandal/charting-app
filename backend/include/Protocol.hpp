@@ -1,13 +1,15 @@
 // backend/include/Protocol.hpp
 
+
 #pragma once
+
 #include <string>
 #include <vector>
-#include <cmath>
+#include <cstdint>
+
 #include <rapidjson/document.h>
 #include <rapidjson/writer.h>
 #include <rapidjson/stringbuffer.h>
-
 // Style struct for series rendering
 struct Style {
     std::string type;      // "line"|"candlestick"|"histogram"
@@ -59,5 +61,46 @@ struct DrawSeriesCommand {
         doc.Accept(writer);
 
         return buffer.GetString();
+    }
+    
+};
+
+
+struct DrawCommand {
+    std::string       type;      // e.g. "axis" or "drawSeries"
+    std::string       pane;      // e.g. "main"
+    std::vector<float> vertices; // [ x0, y0, x1, y1, … ]
+    struct Style {
+        std::string color;       // CSS‐style "#RRGGBB"
+        int         thickness;   // line thickness in pixels
+    } style;
+
+    /// Serialize this DrawCommand into `val` using RapidJSON,
+    /// with allocator `alloc`.
+    void serialize(rapidjson::Value& val, rapidjson::Document::AllocatorType& alloc) const {
+        val.SetObject();
+        // type
+        val.AddMember("type",
+                      rapidjson::Value(type.c_str(), alloc),
+                      alloc);
+        // pane
+        val.AddMember("pane",
+                      rapidjson::Value(pane.c_str(), alloc),
+                      alloc);
+        // vertices
+        rapidjson::Value arr(rapidjson::kArrayType);
+        for (float f : vertices) {
+            arr.PushBack(f, alloc);
+        }
+        val.AddMember("vertices", arr, alloc);
+        // style
+        rapidjson::Value st(rapidjson::kObjectType);
+        st.AddMember("color",
+                     rapidjson::Value(style.color.c_str(), alloc),
+                     alloc);
+        st.AddMember("thickness",
+                     style.thickness,
+                     alloc);
+        val.AddMember("style", st, alloc);
     }
 };

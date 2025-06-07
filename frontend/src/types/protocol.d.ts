@@ -18,3 +18,21 @@ export type DrawSeriesCommand = {
   };
   vertices: number[];  // [ x0, y0, x1, y1, … ]
 };
+
+
+/** One generic draw command */
+export interface DrawCommand {
+  type: 'axis' | 'drawSeries';
+  pane: string;
+  vertices: number[];       // [x0,y0, x1,y1, …]
+  style: {
+    color: string;          // "#RRGGBB"
+    thickness: number;      // px
+  };
+}
+
+/** Batch of commands in one packet */
+export interface DrawBatch {
+  type: 'drawCommands';
+  commands: DrawCommand[];
+}

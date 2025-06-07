@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <string>
@@ -18,5 +19,5 @@ public:
     static std::vector<DataPoint> loadData(const std::string& filePath);
 
     /// Normalizes timestamps→X in [–1..1], values→Y in [–1..1], packages into one DrawSeriesCommand
-    std::vector<DrawSeriesCommand> generateLineChart(const std::vector<DataPoint>& data) const;
+    std::vector<DrawCommand> generateDrawCommands(const std::vector<DataPoint>& data) const;
 };
