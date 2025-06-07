@@ -1,5 +1,22 @@
 [
-  { "timestamp": 1622505600, "value": 100.5 },
-  { "timestamp": 1622505660, "value": 101.2 },
-  { "timestamp": 1622505720, "value": 102.0 }
+  { "timestamp": 1686000000000, "value": 100 },
+  { "timestamp": 1686000060000, "value": 101 },
+  { "timestamp": 1686000120000, "value": 102 },
+  { "timestamp": 1686000180000, "value": 103 },
+  { "timestamp": 1686000240000, "value": 102 },
+  { "timestamp": 1686000300000, "value": 101 },
+  { "timestamp": 1686000360000, "value": 100 },
+  { "timestamp": 1686000420000, "value":  99 },
+  { "timestamp": 1686000480000, "value": 100 },
+  { "timestamp": 1686000540000, "value": 101 },
+  { "timestamp": 1686000600000, "value": 102 },
+  { "timestamp": 1686000660000, "value": 103 },
+  { "timestamp": 1686000720000, "value": 104 },
+  { "timestamp": 1686000780000, "value": 103 },
+  { "timestamp": 1686000840000, "value": 102 },
+  { "timestamp": 1686000900000, "value": 101 },
+  { "timestamp": 1686000960000, "value": 100 },
+  { "timestamp": 1686001020000, "value":  99 },
+  { "timestamp": 1686001080000, "value":  98 },
+  { "timestamp": 1686001140000, "value":  99 }
 ]
