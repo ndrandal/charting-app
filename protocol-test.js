@@ -19,7 +19,10 @@ const drawSeriesSchema = {
     style: {
       type: "object",
       properties: {
-        type: { enum: ["line", "candlestick", "histogram"] },
+       type: {
+         type: "string",
+         enum: ["line","candlestick"]
+       },
         color: { type: "string" },
         upColor: { type: "string" },
         downColor: { type: "string" },
