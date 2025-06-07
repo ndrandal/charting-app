@@ -17,7 +17,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # ---------------------------------------------------------
 
 # 2.1. Your own headers (backend/include/)
+
 include_directories(${CMAKE_SOURCE_DIR}/include)
+
+file(GLOB_RECURSE BACKEND_SOURCES
+  ${CMAKE_SOURCE_DIR}/src/*.cpp
+)
+add_executable(chart_server ${BACKEND_SOURCES})
+target_link_libraries(chart_server PRIVATE Threads::Threads)
+
 
 #
 # 2.2. RapidJSON (header-only)
