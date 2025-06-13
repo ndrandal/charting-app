@@ -1,44 +1,52 @@
 // frontend/src/types/protocol.d.ts
 
-/** What the client sends */
-export type ClientToServer = {
-  type: 'subscribe';
-  requestedSeries: string[];
-};
-
-/** Style for a series */
-export type DrawSeriesStyle =
-  | {
-      type: 'line';
-      color: string;      // "#RRGGBB"
-      thickness: number;  // px
+/** 
+ * Messages sent from the client to the server 
+ * - subscribe: start streaming with a given series style 
+ * - unsubscribe: stop streaming 
+ */
+export type ClientToServer =
+  | { 
+      type: 'subscribe'; 
+      /** Which style to stream: line vs candlestick */ 
+      seriesType: 'line' | 'candlestick'; 
     }
-  | {
-      type: 'candlestick';
-      color: string;      // body color (future: split up/down)
-      thickness: number;  // wick & body width
+  | { 
+      type: 'unsubscribe'; 
     };
 
-/** Command to draw one series */
+/** 
+ * Style parameters for drawing a series 
+ */
+export interface DrawSeriesStyle {
+  /** 'line' or 'candlestick' determines primitive type */
+  type: 'line' | 'candlestick';
+  /** Hex color string, e.g. "#00ff00" */
+  color: string;
+  /** Line width in pixels */
+  thickness: number;
+}
+
+/** 
+ * A single draw command, describing one series to render 
+ */
 export interface DrawSeriesCommand {
+  /** Always 'drawSeries' */
   type: 'drawSeries';
+  /** Pane identifier, e.g. 'main' */
   pane: string;
+  /** Unique series ID */
   seriesId: string;
+  /** Interleaved vertex coordinates [x0, y0, x1, y1, …] */
+  vertices: number[];
+  /** Styling info */
   style: DrawSeriesStyle;
-  vertices: number[];   // line: [x0,y0, x1,y1,…] | candle: [x,o, x,c, x,h, x,l,…]
 }
 
-export type DrawCommand = DrawSeriesCommand | /*…other commands*/ any;
-
+/** 
+ * Batch of draw commands sent from the server to the client 
+ */
 export interface DrawBatch {
   type: 'drawCommands';
-  commands: DrawCommand[];
+  commands: DrawSeriesCommand[];
 }
-
-
-/** Batch of commands in one packet */
-export interface DrawBatch {
-  type: 'drawCommands';
-  commands: DrawCommand[];
-}
-
