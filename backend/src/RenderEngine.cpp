@@ -20,10 +20,28 @@ std::vector<DataPoint> RenderEngine::loadData(const std::string& filePath) {
     }
     std::stringstream buffer;
     buffer << ifs.rdbuf();
-    rapidjson::Document doc;
-    doc.Parse(buffer.str().c_str());
-    std::vector<DataPoint> out;
-    if (!doc.IsArray()) return out;
++    rapidjson::Document doc;
++    doc.Parse(jsonStr.c_str());
++
++    // 1) Syntax check
++    if (doc.HasParseError()) {
++        std::cerr << "[RenderEngine] JSON parse error at offset "
++                  << doc.GetErrorOffset()
++                  << ": "
++                  << rapidjson::GetParseError_En(doc.GetParseError())
++                  << "\n";
++        return {};
++    }
++    // 2) Must be an array
++    if (!doc.IsArray()) {
++        std::cerr << "[RenderEngine] Input JSON is not an array.\n";
++        return {};
++    }
++    // 3) Guard against empty array
++    if (doc.GetArray().Empty()) {
++        std::cerr << "[RenderEngine] Input JSON array is empty.\n";
++        return {};
++    }
     out.reserve(doc.Size());
     for (auto& v : doc.GetArray()) {
         if (!v.IsObject()) continue;
@@ -98,54 +116,4 @@ std::vector<DrawCommand> RenderEngine::generateOhlcDrawCommands(
     DrawCommand cmd = gen->generate("ohlc", data);
     // Wrap it for the caller
     return { std::move(cmd) };
-}
-
-
-std::vector<DrawCommand> RenderEngine::generateDrawCommands(const std::string& chartType, const std::string& jsonStr) {
-    rapidjson::Document doc;
-    doc.Parse(jsonStr.c_str());
-
-    if (!doc.IsArray()) {
-        std::cerr << "[RenderEngine] Input JSON is not an array.\n";
-        return {};
-    }
-
-    // Try creating the generator
-    auto gen = ChartGeneratorFactory::create(chartType);
-    if (!gen) {
-        std::cerr << "[RenderEngine] No generator registered for chartType: " << chartType << "\n";
-        return {};
-    }
-
-    if (chartType == "line") {
-        std::vector<DataPoint> data;
-        for (auto& v : doc.GetArray()) {
-            if (!v.IsObject() || !v.HasMember("timestamp") || !v.HasMember("value")) continue;
-            DataPoint pt;
-            pt.timestamp = v["timestamp"].GetInt64();
-            pt.value = v["value"].GetDouble();
-            data.push_back(pt);
-        }
-        DrawCommand cmd = gen->generate("series", data);
-        return { std::move(cmd) };
-
-    } else if (chartType == "candlestick") {
-        std::vector<OhlcPoint> data;
-        for (auto& v : doc.GetArray()) {
-            if (!v.IsObject() || !v.HasMember("timestamp")) continue;
-            OhlcPoint pt;
-            pt.timestamp = v["timestamp"].GetInt64();
-            pt.open = v["open"].GetDouble();
-            pt.high = v["high"].GetDouble();
-            pt.low  = v["low"].GetDouble();
-            pt.close = v["close"].GetDouble();
-            data.push_back(pt);
-        }
-        DrawCommand cmd = gen->generate("ohlc", data);
-        return { std::move(cmd) };
-
-    } else {
-        std::cerr << "[RenderEngine] Unhandled chartType in dynamic dispatch: " << chartType << "\n";
-        return {};
-    }
 }

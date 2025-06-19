@@ -11,7 +11,11 @@
 
 class ChartGeneratorFactory {
 public:
-    static std::unique_ptr<ChartSeriesGenerator> createGenerator(const std::string& chartType);
+    static std::unique_ptr<ChartGenerator> createGenerator(const std::string& type);
+    // Alias for backwards compatibility:
+    static std::unique_ptr<ChartGenerator> create(const std::string& type) {
+        return createGenerator(type);
+    }
 private:
     using GeneratorCreator = std::function<std::unique_ptr<ChartSeriesGenerator>()>;
     static const std::unordered_map<std::string, GeneratorCreator>& getRegistry();
