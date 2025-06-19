@@ -36,4 +36,8 @@ public:
     /// Normalizes OHLC bars→X/Y and packages into a single "candlestick" DrawSeriesCommand
     std::vector<DrawCommand> generateOhlcDrawCommands(const std::vector<OhlcPoint>& data) const;
 
+    
+    // New: incremental generation from `fromIndex` (0-based)
+    static std::vector<DrawCommand> generateIncrementalDrawCommands(const std::string& seriesType, const std::string& jsonArrayStr, size_t fromIndex);
+
 };

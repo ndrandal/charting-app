@@ -1,147 +1,218 @@
 import React, { useRef, useEffect } from 'react';
-import type { DrawBatch, DrawSeriesStyle } from '../types/protocol';
+import { chartRenderers } from '../renderers';
+import type { DrawBatch } from '../types/protocol';
 
 interface ChartCanvasProps {
-  /** Active WebSocket connection */
   ws: WebSocket;
-  /** Whether streaming is enabled */
   streaming: boolean;
 }
 
-/** Convert "#RRGGBB" → normalized RGB triplet */
-function hexToRgbNormalized(hex: string): [number, number, number] {
-  if (!hex.startsWith('#') || hex.length !== 7) return [0, 0, 0];
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
-  return [r, g, b];
+/**
+ * Compiles a shader of given type from source.
+ */
+function compileShader(
+  gl: WebGL2RenderingContext,
+  source: string,
+  type: GLenum
+): WebGLShader {
+  const shader = gl.createShader(type)!
+  gl.shaderSource(shader, source)
+  gl.compileShader(shader)
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(shader)
+    gl.deleteShader(shader)
+    throw new Error(`Shader compile failed: ${log}`)
+  }
+  return shader
 }
+
+/**
+ * Links a vertex+fragment shader into a program.
+ */
+function createProgram(
+  gl: WebGL2RenderingContext,
+  vertSrc: string,
+  fragSrc: string
+): WebGLProgram {
+  const vert = compileShader(gl, vertSrc, gl.VERTEX_SHADER)
+  const frag = compileShader(gl, fragSrc, gl.FRAGMENT_SHADER)
+  const program = gl.createProgram()!
+  gl.attachShader(program, vert)
+  gl.attachShader(program, frag)
+  gl.linkProgram(program)
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const log = gl.getProgramInfoLog(program)
+    gl.deleteProgram(program)
+    throw new Error(`Program link failed: ${log}`)
+  }
+  // shaders can be deleted once linked
+  gl.deleteShader(vert)
+  gl.deleteShader(frag)
+  return program
+}
+
 
 const ChartCanvas: React.FC<ChartCanvasProps> = ({ ws, streaming }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const batchRef = useRef<DrawBatch | null>(null);
   const frameRef = useRef<number>(0);
+  const colorLocRef = useRef<WebGLUniformLocation | null>(null)
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const gl = canvas.getContext('webgl2');
-    if (!gl) {
-      console.error('WebGL2 not supported');
-      return;
-    }
+    if (!ws) return; // nothing to do if no socket
 
-    // Compile shaders and link program
-    const vs = gl.createShader(gl.VERTEX_SHADER)!;
-    gl.shaderSource(vs, `#version 300 es
-      in vec2 a_position;
-      void main() {
-        gl_Position = vec4(a_position, 0, 1);
-      }
-    `);
-    gl.compileShader(vs);
-
-    const fs = gl.createShader(gl.FRAGMENT_SHADER)!;
-    gl.shaderSource(fs, `#version 300 es
-      precision mediump float;
-      uniform vec4 u_color;
-      out vec4 outColor;
-      void main() {
-        outColor = u_color;
-      }
-    `);
-    gl.compileShader(fs);
-
-    const program = gl.createProgram()!;
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    gl.useProgram(program);
-
-    // Look up locations
-    const posLoc = gl.getAttribLocation(program, 'a_position');
-    const colorLocRaw = gl.getUniformLocation(program, 'u_color');
-    if (!colorLocRaw) {
-      console.error('Uniform u_color not found');
-      return;
-    }
-    const colorLoc = colorLocRaw;
-
-    // Set up vertex buffer
-    const buffer = gl.createBuffer()!;
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.enableVertexAttribArray(posLoc);
-    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-
-    // Resize handler
-    const resize = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const w = canvas.clientWidth * dpr;
-      const h = canvas.clientHeight * dpr;
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
-      }
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.clearColor(0, 0, 0, 1);
-    };
-    resize();
-    window.addEventListener('resize', resize);
-
-    // Listen for incoming draw batches
-    const onMsg = (evt: MessageEvent) => {
+    // 1) Message handler: parse JSON, update batchRef on drawCommands
+    const onMessage = (event: MessageEvent) => {
       try {
-        console.log(evt);
-        const packet: DrawBatch = JSON.parse(evt.data);
-        if (packet.type === 'drawCommands') {
-          batchRef.current = packet;
+        const data = JSON.parse(event.data);
+        if (data.type === 'drawCommands') {
+          batchRef.current = data;            // store for the draw loop
+        } else if (data.type === 'error') {
+          console.error('Server error:', data.message);
         }
-      } catch {
-        // ignore malformed
-      }
-    };
-    ws.addEventListener('message', onMsg);
-
-    // Draw function
-    const draw = () => {
-      const batch = batchRef.current;
-      if (!batch) return;
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      for (const cmd of batch.commands) {
-        const style = cmd.style as DrawSeriesStyle;
-        const [r, g, b] = hexToRgbNormalized(style.color);
-        gl.uniform4f(colorLoc, r, g, b, 1);
-        gl.lineWidth(style.thickness);
-        gl.bufferData(
-          gl.ARRAY_BUFFER,
-          new Float32Array(cmd.vertices),
-          gl.STATIC_DRAW
-        );
-        const prim = style.type === 'line' ? gl.LINE_STRIP : gl.LINES;
-        gl.drawArrays(prim, 0, cmd.vertices.length / 2);
+      } catch (e) {
+        console.error('Invalid JSON from server:', e);
       }
     };
 
-    // Render loop
-    const loop = () => {
-      if (!streaming) return;
-      draw();
-      frameRef.current = requestAnimationFrame(loop);
+    // 2) Optional: error & close handlers for diagnostics
+    const onError = (event: Event) => {
+      console.error('WebSocket error', event);
     };
-    if (streaming) loop();
-    else cancelAnimationFrame(frameRef.current);
+    const onClose = () => {
+      console.warn('WebSocket closed');
+    };
 
-    // Cleanup on unmount
+    // 3) Attach listeners
+    ws.addEventListener('message', onMessage);
+    ws.addEventListener('error', onError);
+    ws.addEventListener('close', onClose);
+
+    // 4) Cleanup on unmount or if ws changes
     return () => {
-      cancelAnimationFrame(frameRef.current);
-      window.removeEventListener('resize', resize);
-      ws.removeEventListener('message', onMsg);
-      gl.deleteBuffer(buffer);
-      gl.deleteProgram(program);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
+      ws.removeEventListener('message', onMessage);
+      ws.removeEventListener('error', onError);
+      ws.removeEventListener('close', onClose);
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
     };
-  }, [ws, streaming]);
+  }, [ws]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) {
+      console.error('Canvas element not found')
+      return
+    }
+    const gl = canvas.getContext('webgl2')
+    if (!gl) {
+      console.error('WebGL2 not supported')
+      return
+    }
+
+
+
+    // Compile shaders and create program (example, adapt to your code)
+    const vertSrc = (document.getElementById('vertex-shader') as HTMLScriptElement).text
+    const fragSrc = (document.getElementById('fragment-shader') as HTMLScriptElement).text
+    const program = createProgram(gl, vertSrc, fragSrc)
+    gl.useProgram(program)
+
+    // Now grab the uniform location for `u_color`
+    const loc = gl.getUniformLocation(program, 'u_color')
+    if (!loc) {
+      console.error("Could not find uniform 'u_color'")
+    }
+    colorLocRef.current = loc
+
+
+    // Create a single buffer for all series
+    const buffer = gl.createBuffer()
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+    const aPos = gl.getAttribLocation(program, 'a_position')
+    gl.enableVertexAttribArray(aPos)
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
+
+    // Handle canvas resize
+    const resize = () => {
+      const width = canvas.clientWidth
+      const height = canvas.clientHeight
+      canvas.width = width
+      canvas.height = height
+      gl.viewport(0, 0, width, height)
+    }
+    window.addEventListener('resize', resize)
+    resize()
+
+    return () => {
+      window.removeEventListener('resize', resize)
+      // If you stored program or buffer in refs, you could delete them here:
+      // gl.deleteProgram(program)
+      // gl.deleteBuffer(buffer)
+    }
+  }, [])  // <-- runs once on mount
+
+    // 2) Render loop effect
+  useEffect(() => {
+    if (!streaming) return
+
+    const canvas = canvasRef.current
+    const gl = canvas?.getContext('webgl2')
+    if (!canvas || !gl) return
+
+    const renderLoop = () => {
+      // Clear canvas
+      gl.clear(gl.COLOR_BUFFER_BIT)
+
+      // Draw each series in the latest batch
+      const batch = batchRef.current;
+      const colorLoc = colorLocRef.current!
+      if (batch) {
+        batch.commands.forEach(cmd => {
+        // Determine pane viewport
+        if (cmd.pane === 'main') {
+          // Upper 70%
+          gl.viewport(
+            0,
+            Math.floor(canvas.height * 0.3),
+            canvas.width,
+            Math.floor(canvas.height * 0.7)
+          );
+        } else if (cmd.pane === 'volume') {
+          // Lower 30%
+          gl.viewport(
+            0,
+            0,
+            canvas.width,
+            Math.floor(canvas.height * 0.3)
+          );
+        } else {
+          // Default to full canvas
+          gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+
+        // Then draw as before
+        if (cmd.seriesId === 'price') {
+          chartRenderers.LineChartRenderer.draw( gl, cmd, colorLoc);
+        } else {
+          chartRenderers.CandlestickChartRenderer.draw( gl, cmd, colorLoc);
+        }
+    });
+
+      }
+      // Schedule next frame
+      frameRef.current = requestAnimationFrame(renderLoop)
+    }
+
+    frameRef.current = requestAnimationFrame(renderLoop)
+    return () => {
+      if (frameRef.current !== undefined) {
+        cancelAnimationFrame(frameRef.current)
+      }
+    }
+  }, [streaming])  // <-- re-runs when `streaming` toggles
+
 
   return <canvas ref={canvasRef} style={{ width: '100vw', height: '100vh' }} />;
 };

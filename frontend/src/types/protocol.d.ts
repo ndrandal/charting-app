@@ -1,50 +1,73 @@
-// frontend/src/types/protocol.d.ts
-
-/** 
- * Messages sent from the client to the server 
- * - subscribe: start streaming with a given series style 
- * - unsubscribe: stop streaming 
+/**
+ * Messages sent from the client to the server
+ * - subscribe: start streaming with a given series style
+ * - unsubscribe: stop streaming
  */
 export type ClientToServer =
-  | { 
-      type: 'subscribe'; 
-      /** Which style to stream: line vs candlestick */ 
-      seriesType: 'line' | 'candlestick'; 
+  | {
+      type: 'subscribe';
+      /** Which chart type to stream: line vs. candlestick */
+      seriesType: 'line' | 'candlestick';
     }
-  | { 
-      type: 'unsubscribe'; 
+  | {
+      type: 'unsubscribe';
     };
 
-/** 
- * Style parameters for drawing a series 
+/**
+ * Base style fields common to all series
  */
-export interface DrawSeriesStyle {
-  /** 'line' or 'candlestick' determines primitive type */
+interface BaseStyle {
+  /** Name of the chart rendering strategy */
   type: 'line' | 'candlestick';
-  /** Hex color string, e.g. "#00ff00" */
+  /** Primary color in hex, e.g. "#22FF88" */
   color: string;
-  /** Line width in pixels */
+  /** Stroke thickness in pixels */
   thickness: number;
 }
 
-/** 
- * A single draw command, describing one series to render 
+/**
+ * Style for a line chart
+ */
+export interface LineStyle extends BaseStyle {
+  type: 'line';
+  // (Add future line-specific fields here)
+}
+
+/**
+ * Style for a candlestick chart
+ */
+export interface CandlestickStyle extends BaseStyle {
+  type: 'candlestick';
+  /** Color for down-candles (close < open) */
+  altColor: string;
+  /** Optional color for wicks; if omitted, use `color` */
+  wickColor?: string;
+}
+
+/**
+ * Union of all supported series styles.
+ * Add new chart types here as you implement new strategies.
+ */
+export type DrawSeriesStyle = LineStyle | CandlestickStyle;
+
+/**
+ * A single draw command to render one data series.
  */
 export interface DrawSeriesCommand {
-  /** Always 'drawSeries' */
+  /** Always "drawSeries" for series-rendering operations */
   type: 'drawSeries';
-  /** Pane identifier, e.g. 'main' */
+  /** Logical pane identifier (e.g. "main", "overlay") */
   pane: string;
-  /** Unique series ID */
+  /** Unique series ID (for layering, updates, etc.) */
   seriesId: string;
-  /** Interleaved vertex coordinates [x0, y0, x1, y1, …] */
+  /** Interleaved [x0, y0, x1, y1, …], normalized to clip space */
   vertices: number[];
-  /** Styling info */
+  /** Styling parameters for this series */
   style: DrawSeriesStyle;
 }
 
-/** 
- * Batch of draw commands sent from the server to the client 
+/**
+ * A batch of draw commands from the server.
  */
 export interface DrawBatch {
   type: 'drawCommands';
