@@ -20,28 +20,28 @@ std::vector<DataPoint> RenderEngine::loadData(const std::string& filePath) {
     }
     std::stringstream buffer;
     buffer << ifs.rdbuf();
-+    rapidjson::Document doc;
-+    doc.Parse(jsonStr.c_str());
-+
-+    // 1) Syntax check
-+    if (doc.HasParseError()) {
-+        std::cerr << "[RenderEngine] JSON parse error at offset "
-+                  << doc.GetErrorOffset()
-+                  << ": "
-+                  << rapidjson::GetParseError_En(doc.GetParseError())
-+                  << "\n";
-+        return {};
-+    }
-+    // 2) Must be an array
-+    if (!doc.IsArray()) {
-+        std::cerr << "[RenderEngine] Input JSON is not an array.\n";
-+        return {};
-+    }
-+    // 3) Guard against empty array
-+    if (doc.GetArray().Empty()) {
-+        std::cerr << "[RenderEngine] Input JSON array is empty.\n";
-+        return {};
-+    }
+    rapidjson::Document doc;
+    doc.Parse(jsonStr.c_str());
+
+    // 1) Syntax check
+    if (doc.HasParseError()) {
+        std::cerr << "[RenderEngine] JSON parse error at offset "
+                  << doc.GetErrorOffset()
+                  << ": "
+                  << rapidjson::GetParseError_En(doc.GetParseError())
+                  << "\n";
+        return {};
+    }
+    // 2) Must be an array
+    if (!doc.IsArray()) {
+        std::cerr << "[RenderEngine] Input JSON is not an array.\n";
+        return {};
+    }
+    // 3) Guard against empty array
+    if (doc.GetArray().Empty()) {
+        std::cerr << "[RenderEngine] Input JSON array is empty.\n";
+        return {};
+    }
     out.reserve(doc.Size());
     for (auto& v : doc.GetArray()) {
         if (!v.IsObject()) continue;
@@ -116,4 +116,43 @@ std::vector<DrawCommand> RenderEngine::generateOhlcDrawCommands(
     DrawCommand cmd = gen->generate("ohlc", data);
     // Wrap it for the caller
     return { std::move(cmd) };
+}
+
+std::vector<ChartingApp::DrawCommand>
+ChartingApp::RenderEngine::generateIncrementalDrawCommands(
+    const std::string& seriesType,
+    const std::string& jsonArrayStr,
+    size_t fromIndex)
+{
+    using namespace rapidjson;
+    // Parse JSON array
+    Document doc;
+    doc.Parse(jsonArrayStr.c_str());
+    if (doc.HasParseError() || !doc.IsArray()) {
+        std::cerr << "[RenderEngine] Invalid JSON for incremental data\n";
+        return {};
+    }
+
+    const auto& arr = doc.GetArray();
+    size_t total = arr.Size();
+    if (fromIndex >= total) {
+        // Nothing new
+        return {};
+    }
+
+    // Build a new rapidjson::Document containing only the tail slice
+    Document sliceDoc(kArrayType);
+    auto& alloc = sliceDoc.GetAllocator();
+    for (size_t i = fromIndex; i < total; ++i) {
+        sliceDoc.PushBack(arr[i], alloc);
+    }
+
+    // Serialize sliceDoc back to string for reuse of existing logic
+    StringBuffer buf;
+    Writer<StringBuffer> writer(buf);
+    sliceDoc.Accept(writer);
+    std::string sliceJson = buf.GetString();
+
+    // Delegate to the full‐batch generator on this smaller slice
+    return generateDrawCommands(seriesType, sliceJson);
 }

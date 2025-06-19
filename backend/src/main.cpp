@@ -54,6 +54,47 @@ void do_session(tcp::socket socket) {
                     ws.write(net::buffer(err));
                     continue;
                 }
+                else if (reqType == "appendData") {
+                // Validate fields
+                 if (!req.HasMember("seriesType") || !req["seriesType"].IsString()
+                   || !req.HasMember("fromIndex")  || !req["fromIndex"].IsUint()) {
+                      const char* err = R"({"type":"error","message":"Invalid appendData payload"})";
+                      ws.write(net::buffer(err));
+                      continue;
+                  }
+                  std::string seriesType = req["seriesType"].GetString();
+                  size_t fromIndex = req["fromIndex"].GetUint();
+      
+                  // Reload the same JSON array from disk
+                  std::string dataFile = getEnvOr("DATA_FILE_PATH", "data/sample_data.json");
+                  std::ifstream ifs(dataFile);
+                  if (!ifs.is_open()) {
+                      const char* err = R"({"type":"error","message":"Cannot open data file"})";
+                      ws.write(net::buffer(err));
+                      continue;
+                  }
+                  std::string jsonArray((std::istreambuf_iterator<char>(ifs)),
+                                        std::istreambuf_iterator<char>());
+      
+                  // Generate only new commands
+                  auto cmds = ChartingApp::RenderEngine::generateIncrementalDrawCommands(
+                      seriesType, jsonArray, fromIndex);
+      
+                  // Build the same drawCommands envelope
+                  rapidjson::Document resp(rapidjson::kObjectType);
+                  auto& alloc = resp.GetAllocator();
+                  resp.AddMember("type", "drawCommands", alloc);
+                  rapidjson::Value arr(rapidjson::kArrayType);
+                  for (auto& cmd : cmds) {
+                      // … copy cmd into arr as in Protocol.cpp …
+                  }
+                  resp.AddMember("commands", arr, alloc);
+      
+                  rapidjson::StringBuffer sb;
+                  rapidjson::Writer<rapidjson::StringBuffer> w(sb);
+                  resp.Accept(w);
+                  ws.write(net::buffer(sb.GetString()));
+                }
                 std::string seriesType = req["seriesType"].GetString();
 
                 // Load the JSON array from disk
