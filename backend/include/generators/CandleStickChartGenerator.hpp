@@ -1,23 +1,15 @@
-#pragma once
+#include "generators/CandleStickChartGenerator.hpp"
+#include "DrawCommand.hpp"
 
-#include "generators/ChartSeriesGenerator.hpp"
+DrawCommand CandleStickChartGenerator::generate(const std::string& label, const std::vector<OhlcPoint>& data) {
+    DrawCommand cmd;
+    cmd.type = "candlestick";
+    cmd.label = label;
 
-/**
- * Generates a candlestick chart from OhlcPoint series.
- */
-class CandlestickChartGenerator : public ChartSeriesGenerator {
-public:
-    // Not used for plain DataPoint series
-    DrawCommand generate(
-        const std::string& seriesId,
-        const std::vector<DataPoint>& data
-    ) override {
-        return DrawCommand{};
+    for (const auto& pt : data) {
+        cmd.timestamps.push_back(pt.timestamp);
+        cmd.values.push_back(pt.close); // Assuming we visualize 'close'
     }
 
-    // Only the OhlcPoint overload is implemented
-    DrawCommand generate(
-        const std::string& seriesId,
-        const std::vector<OhlcPoint>& data
-    ) override;
-};
+    return cmd;
+}

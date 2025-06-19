@@ -70,6 +70,12 @@ std::string Protocol::processRequest(const std::string& chartType, const std::st
         writer.Double(val);
     }
     writer.EndArray();
+    writer.Key("timestamps");
+    writer.StartArray();
+    for (const auto& ts : cmd.timestamps) {
+        writer.Int64(ts);
+    }
+    writer.EndArray();
     writer.EndObject();
 
     return buffer.GetString();

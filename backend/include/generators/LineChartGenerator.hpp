@@ -1,23 +1,15 @@
-#pragma once
+#include "generators/LineChartGenerator.hpp"
+#include "DrawCommand.hpp"
 
-#include "generators/ChartSeriesGenerator.hpp"
+DrawCommand LineChartGenerator::generate(const std::string& label, const std::vector<DataPoint>& data) {
+    DrawCommand cmd;
+    cmd.type = "line";
+    cmd.label = label;
 
-/**
- * Generates a simple line chart from DataPoint series.
- */
-class LineChartGenerator : public ChartSeriesGenerator {
-public:
-    // Only the DataPoint overload is implemented
-    DrawCommand generate(
-        const std::string& seriesId,
-        const std::vector<DataPoint>& data
-    ) override;
-
-    // Not used for OHLC data
-    DrawCommand generate(
-        const std::string& seriesId,
-        const std::vector<OhlcPoint>& data
-    ) override {
-        return DrawCommand{};
+    for (const auto& pt : data) {
+        cmd.timestamps.push_back(pt.timestamp);
+        cmd.values.push_back(pt.value);
     }
-};
+
+    return cmd;
+}
