@@ -6,10 +6,57 @@ interface ChartCanvasProps {
   ws: WebSocket;
   streaming: boolean;
 }
+
+/**
+ * Compiles a shader of given type from source.
+ */
+function compileShader(
+  gl: WebGL2RenderingContext,
+  source: string,
+  type: GLenum
+): WebGLShader {
+  const shader = gl.createShader(type)!
+  gl.shaderSource(shader, source)
+  gl.compileShader(shader)
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(shader)
+    gl.deleteShader(shader)
+    throw new Error(`Shader compile failed: ${log}`)
+  }
+  return shader
+}
+
+/**
+ * Links a vertex+fragment shader into a program.
+ */
+function createProgram(
+  gl: WebGL2RenderingContext,
+  vertSrc: string,
+  fragSrc: string
+): WebGLProgram {
+  const vert = compileShader(gl, vertSrc, gl.VERTEX_SHADER)
+  const frag = compileShader(gl, fragSrc, gl.FRAGMENT_SHADER)
+  const program = gl.createProgram()!
+  gl.attachShader(program, vert)
+  gl.attachShader(program, frag)
+  gl.linkProgram(program)
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const log = gl.getProgramInfoLog(program)
+    gl.deleteProgram(program)
+    throw new Error(`Program link failed: ${log}`)
+  }
+  // shaders can be deleted once linked
+  gl.deleteShader(vert)
+  gl.deleteShader(frag)
+  return program
+}
+
+
 const ChartCanvas: React.FC<ChartCanvasProps> = ({ ws, streaming }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const batchRef = useRef<DrawBatch | null>(null);
   const frameRef = useRef<number>(0);
+  const colorLocRef = useRef<WebGLUniformLocation | null>(null)
 
   useEffect(() => {
     if (!ws) return; // nothing to do if no socket
@@ -64,11 +111,21 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({ ws, streaming }) => {
       return
     }
 
+
+
     // Compile shaders and create program (example, adapt to your code)
     const vertSrc = (document.getElementById('vertex-shader') as HTMLScriptElement).text
     const fragSrc = (document.getElementById('fragment-shader') as HTMLScriptElement).text
     const program = createProgram(gl, vertSrc, fragSrc)
     gl.useProgram(program)
+
+    // Now grab the uniform location for `u_color`
+    const loc = gl.getUniformLocation(program, 'u_color')
+    if (!loc) {
+      console.error("Could not find uniform 'u_color'")
+    }
+    colorLocRef.current = loc
+
 
     // Create a single buffer for all series
     const buffer = gl.createBuffer()
@@ -109,7 +166,8 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({ ws, streaming }) => {
       gl.clear(gl.COLOR_BUFFER_BIT)
 
       // Draw each series in the latest batch
-      const batch = batchRef.current
+      const batch = batchRef.current;
+      const colorLoc = colorLocRef.current!
       if (batch) {
         batch.commands.forEach(cmd => {
         // Determine pane viewport
@@ -136,9 +194,9 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({ ws, streaming }) => {
 
         // Then draw as before
         if (cmd.seriesId === 'price') {
-          LineChartRenderer.draw(cmd, gl)
+          chartRenderers.LineChartRenderer.draw( gl, cmd, colorLoc);
         } else {
-          CandlestickChartRenderer.draw(cmd, gl)
+          chartRenderers.CandlestickChartRenderer.draw( gl, cmd, colorLoc);
         }
     });
 
