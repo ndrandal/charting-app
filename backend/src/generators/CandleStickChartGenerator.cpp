@@ -1,4 +1,4 @@
-#include "CandleStickChartGenerator.hpp"
+#include "generators/CandlestickChartGenerator.hpp"
 #include <algorithm>
 
 DrawCommand CandlestickChartGenerator::generate(
