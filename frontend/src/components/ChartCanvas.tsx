@@ -112,14 +112,36 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({ ws, streaming }) => {
       const batch = batchRef.current
       if (batch) {
         batch.commands.forEach(cmd => {
-          if (cmd.type === 'drawSeries') {
-            if (cmd.seriesId === 'price') {
-              LineChartRenderer.draw(cmd, gl)
-            } else {
-              CandlestickChartRenderer.draw(cmd, gl)
-            }
-          }
-        })
+        // Determine pane viewport
+        if (cmd.pane === 'main') {
+          // Upper 70%
+          gl.viewport(
+            0,
+            Math.floor(canvas.height * 0.3),
+            canvas.width,
+            Math.floor(canvas.height * 0.7)
+          );
+        } else if (cmd.pane === 'volume') {
+          // Lower 30%
+          gl.viewport(
+            0,
+            0,
+            canvas.width,
+            Math.floor(canvas.height * 0.3)
+          );
+        } else {
+          // Default to full canvas
+          gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+
+        // Then draw as before
+        if (cmd.seriesId === 'price') {
+          LineChartRenderer.draw(cmd, gl)
+        } else {
+          CandlestickChartRenderer.draw(cmd, gl)
+        }
+    });
+
       }
       // Schedule next frame
       frameRef.current = requestAnimationFrame(renderLoop)

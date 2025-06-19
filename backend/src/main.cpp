@@ -49,56 +49,25 @@ void do_session(tcp::socket socket) {
 
             std::string reqType = req["type"].GetString();
             if (reqType == "subscribe") {
-                if (!req.HasMember("seriesType") || !req["seriesType"].IsString()) {
-                    const char* err = R"({"type":"error","message":"Missing 'seriesType'"})";
+                if (reqType == "subscribe") {
+                // Collect requested series types (string or array)
+                std::vector<std::string> types;
+                auto& alloc = req.GetAllocator();
+
+                if (req.HasMember("seriesTypes") && req["seriesTypes"].IsArray()) {
+                    for (auto& v : req["seriesTypes"].GetArray()) {
+                        if (v.IsString())
+                            types.emplace_back(v.GetString());
+                    }
+                } else if (req.HasMember("seriesType") && req["seriesType"].IsString()) {
+                    types.emplace_back(req["seriesType"].GetString());
+                } else {
+                    const char* err = R"({"type":"error","message":"Missing 'seriesType(s)' field"})";
                     ws.write(net::buffer(err));
                     continue;
                 }
-                else if (reqType == "appendData") {
-                // Validate fields
-                 if (!req.HasMember("seriesType") || !req["seriesType"].IsString()
-                   || !req.HasMember("fromIndex")  || !req["fromIndex"].IsUint()) {
-                      const char* err = R"({"type":"error","message":"Invalid appendData payload"})";
-                      ws.write(net::buffer(err));
-                      continue;
-                  }
-                  std::string seriesType = req["seriesType"].GetString();
-                  size_t fromIndex = req["fromIndex"].GetUint();
-      
-                  // Reload the same JSON array from disk
-                  std::string dataFile = getEnvOr("DATA_FILE_PATH", "data/sample_data.json");
-                  std::ifstream ifs(dataFile);
-                  if (!ifs.is_open()) {
-                      const char* err = R"({"type":"error","message":"Cannot open data file"})";
-                      ws.write(net::buffer(err));
-                      continue;
-                  }
-                  std::string jsonArray((std::istreambuf_iterator<char>(ifs)),
-                                        std::istreambuf_iterator<char>());
-      
-                  // Generate only new commands
-                  auto cmds = ChartingApp::RenderEngine::generateIncrementalDrawCommands(
-                      seriesType, jsonArray, fromIndex);
-      
-                  // Build the same drawCommands envelope
-                  rapidjson::Document resp(rapidjson::kObjectType);
-                  auto& alloc = resp.GetAllocator();
-                  resp.AddMember("type", "drawCommands", alloc);
-                  rapidjson::Value arr(rapidjson::kArrayType);
-                  for (auto& cmd : cmds) {
-                      // … copy cmd into arr as in Protocol.cpp …
-                  }
-                  resp.AddMember("commands", arr, alloc);
-      
-                  rapidjson::StringBuffer sb;
-                  rapidjson::Writer<rapidjson::StringBuffer> w(sb);
-                  resp.Accept(w);
-                  ws.write(net::buffer(sb.GetString()));
-                }
-                std::string seriesType = req["seriesType"].GetString();
 
-                // Load the JSON array from disk
-                // DATA_FILE_PATH can be set at compile time or via env
+                // Load the same JSON array from disk once
                 std::string dataFile = getEnvOr("DATA_FILE_PATH", "data/sample_data.json");
                 std::ifstream ifs(dataFile);
                 if (!ifs.is_open()) {
@@ -109,10 +78,47 @@ void do_session(tcp::socket socket) {
                 std::string jsonArray((std::istreambuf_iterator<char>(ifs)),
                                       std::istreambuf_iterator<char>());
 
-                // Delegate to Protocol (which wraps RenderEngine)
-                std::string response = Protocol::processRequest(seriesType, jsonArray);
-                ws.write(net::buffer(response));
+                // For each requested series, generate commands and collect
+                std::vector<ChartingApp::DrawCommand> allCmds;
+                for (auto& st : types) {
+                    auto cmds = ChartingApp::RenderEngine::generateDrawCommands(st, jsonArray);
+                    allCmds.insert(allCmds.end(), cmds.begin(), cmds.end());
+                }
 
+                // Build one batch envelope with ALL commands
+                rapidjson::Document resp(rapidjson::kObjectType);
+                auto& ralloc = resp.GetAllocator();
+                resp.AddMember("type", "drawCommands", ralloc);
+
+                rapidjson::Value arr(rapidjson::kArrayType);
+                for (auto& cmd : allCmds) {
+                    rapidjson::Value obj(rapidjson::kObjectType);
+                    obj.AddMember("type", rapidjson::Value(cmd.type.c_str(), ralloc), ralloc);
+                    obj.AddMember("label", rapidjson::Value(cmd.label.c_str(), ralloc), ralloc);
+                    obj.AddMember("pane", rapidjson::Value(cmd.pane.c_str(), ralloc), ralloc);
+                    obj.AddMember("seriesId", rapidjson::Value(cmd.seriesId.c_str(), ralloc), ralloc);
+
+                    // vertices
+                    rapidjson::Value verts(rapidjson::kArrayType);
+                    for (float v : cmd.vertices) verts.PushBack(v, ralloc);
+                    obj.AddMember("vertices", verts, ralloc);
+
+                    // style
+                    rapidjson::Value styleObj(rapidjson::kObjectType);
+                    styleObj.AddMember("color", rapidjson::Value(cmd.style.color.c_str(), ralloc), ralloc);
+                    styleObj.AddMember("altColor", rapidjson::Value(cmd.style.altColor.c_str(), ralloc), ralloc);
+                    styleObj.AddMember("wickColor", rapidjson::Value(cmd.style.wickColor.c_str(), ralloc), ralloc);
+                    styleObj.AddMember("thickness", cmd.style.thickness, ralloc);
+                    obj.AddMember("style", styleObj, ralloc);
+
+                    arr.PushBack(obj, ralloc);
+                }
+                resp.AddMember("commands", arr, ralloc);
+
+                rapidjson::StringBuffer sb;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+                resp.Accept(writer);
+                ws.write(net::buffer(sb.GetString()));
             } else if (reqType == "unsubscribe") {
                 // Graceful close
                 ws.close(websocket::close_code::normal);

@@ -11,6 +11,7 @@ const App: React.FC = () => {
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [seriesType, setSeriesType] = useState<SeriesType>('line')
+  const [seriesTypes, setSeriesTypes] = useState<SeriesType[]>(['line'])
 
   // Establish WebSocket & handle subscribe/unsubscribe
   useEffect(() => {
