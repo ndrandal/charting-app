@@ -22,10 +22,10 @@ const App: React.FC = () => {
       setConnected(true)
       setError(null)
       // Immediately subscribe to the current seriesType
-      socket.send(JSON.stringify({
-        type: 'subscribe',
-        seriesType
-      }))
+    socket.send(JSON.stringify({
+      type: 'subscribe',
+      seriesTypes: seriesTypes  // send the whole array
+    }));
       setStreaming(true)
     }
 
@@ -60,10 +60,41 @@ const App: React.FC = () => {
       <div style={{ marginBottom: 12 }}>
         <label>
           Chart type:&nbsp;
-          <select value={seriesType} onChange={handleSeriesChange}>
-            <option value="line">Line</option>
-            <option value="candlestick">Candlestick</option>
-          </select>
+          <div style={{ marginBottom: 12 }}>
+            <label>
+              <input
+                type="checkbox"
+                value="line"
+                checked={seriesTypes.includes('line')}
+                onChange={e => {
+                  const checked = e.target.checked;
+                  setSeriesTypes(prev =>
+                    checked
+                      ? [...prev, 'line']
+                      : prev.filter(s => s !== 'line')
+                  );
+                }}
+              />{' '}
+              Line
+            </label>
+            {' '}
+            <label>
+              <input
+                type="checkbox"
+                value="candlestick"
+                checked={seriesTypes.includes('candlestick')}
+                onChange={e => {
+                  const checked = e.target.checked;
+                  setSeriesTypes(prev =>
+                    checked
+                      ? [...prev, 'candlestick']
+                      : prev.filter(s => s !== 'candlestick')
+                  );
+                }}
+              />{' '}
+              Candlestick
+            </label>
+          </div>
         </label>
       </div>
 
