@@ -1,46 +1,47 @@
-const Ajv = require("ajv");
-const ajv = new Ajv();
+const fs = require("fs");
+const { exec } = require("child_process");
+const path = require("path");
 
-// 1. Example drawSeries JSON
-const exampleDrawSeries = {
-  type: "drawSeries",
-  pane: "pricePane",
-  seriesId: "price",
-  style: { type: "line", color: "#22ff88", thickness: 2 },
-  vertices: [ -1, 0.0, -0.8, 0.1, -0.6, -0.1 ]
+// Configuration
+const CHART_TYPE = "candlestick"; // Change to "line" or others as needed
+
+// Sample data for each chart type
+const chartSamples = {
+  line: [
+    { timestamp: 1710000000, value: 100.1 },
+    { timestamp: 1710000001, value: 102.5 }
+  ],
+  candlestick: [
+    { timestamp: 1710000000, open: 100, high: 105, low: 95, close: 102 },
+    { timestamp: 1710000060, open: 102, high: 106, low: 101, close: 104 }
+  ]
 };
 
-const drawSeriesSchema = {
-  type: "object",
-  properties: {
-    type: { const: "drawSeries" },
-    pane: { type: "string" },
-    seriesId: { type: "string" },
-    style: {
-      type: "object",
-      properties: {
-       type: {
-         type: "string",
-         enum: ["line","candlestick"]
-       },
-        color: { type: "string" },
-        upColor: { type: "string" },
-        downColor: { type: "string" },
-        thickness: { type: "integer", minimum: 1 }
-      },
-      required: ["type", "thickness"],
-      additionalProperties: false
-    },
-    vertices: {
-      type: "array",
-      items: { type: "number" },
-      minItems: 4
-    }
-  },
-  required: ["type", "pane", "seriesId", "style", "vertices"],
-  additionalProperties: false
-};
+// Step 1: Format input string
+const inputText = `${CHART_TYPE}\n${JSON.stringify(chartSamples[CHART_TYPE], null, 2)}`;
 
-const validate = ajv.compile(drawSeriesSchema);
-console.log("drawSeries valid?", validate(exampleDrawSeries));
-if (!validate(exampleDrawSeries)) console.error(validate.errors);
+// Step 2: Write to data/sample_data.json
+const samplePath = path.join(__dirname, "data", "sample_data.json");
+
+fs.writeFileSync(samplePath, inputText, "utf-8");
+console.log(`[test] Wrote ${CHART_TYPE} test data to sample_data.json`);
+
+// Step 3: Run the C++ backend
+exec("./backend/bin/charting-backend", (err, stdout, stderr) => {
+  if (err) {
+    console.error("[test] Execution failed:", err);
+    return;
+  }
+  if (stderr) {
+    console.warn("[test] stderr:", stderr);
+  }
+
+  console.log("[test] Backend response:");
+  try {
+    const json = JSON.parse(stdout.trim());
+    console.dir(json, { depth: null });
+  } catch (e) {
+    console.log(stdout);
+    console.error("[test] Invalid JSON response.");
+  }
+});
