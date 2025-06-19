@@ -25,5 +25,12 @@ add_executable(chart_server
   ${GENERATOR_SRCS}
 )
 
+# Copy sample_data.json (and any other files in data/) into build/data/
+add_custom_command(TARGET chart_server POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/../data
+    ${CMAKE_BINARY_DIR}/data
+)
+
 target_compile_definitions(chart_server PRIVATE ASIO_STANDALONE BOOST_ALL_NO_LIB)
 target_link_libraries(chart_server PRIVATE Threads::Threads)
