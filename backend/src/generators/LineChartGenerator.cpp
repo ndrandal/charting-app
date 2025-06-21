@@ -9,7 +9,6 @@ DrawCommand LineChartGenerator::generate(
     cmd.type     = "drawSeries";
     cmd.pane     = "main";
     cmd.seriesId = seriesId;
-    cmd.style.type      = "line";
     cmd.style.color     = "#00ff00";  // placeholder color
     cmd.style.thickness = 1;          // px
 

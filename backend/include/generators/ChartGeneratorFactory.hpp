@@ -1,3 +1,4 @@
+#pragma once
 #ifndef CHART_GENERATOR_FACTORY_HPP
 #define CHART_GENERATOR_FACTORY_HPP
 
@@ -11,9 +12,8 @@
 
 class ChartGeneratorFactory {
 public:
-    static std::unique_ptr<ChartGenerator> createGenerator(const std::string& type);
-    // Alias for backwards compatibility:
-    static std::unique_ptr<ChartGenerator> create(const std::string& type) {
+    static std::unique_ptr<ChartSeriesGenerator> createGenerator(const std::string& type);
+    static std::unique_ptr<ChartSeriesGenerator> create(const std::string& type) {
         return createGenerator(type);
     }
 private:

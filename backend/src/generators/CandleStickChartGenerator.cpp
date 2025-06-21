@@ -1,7 +1,7 @@
-#include "generators/CandlestickChartGenerator.hpp"
+#include "generators/CandleStickChartGenerator.hpp"
 #include <algorithm>
 
-DrawCommand CandlestickChartGenerator::generate(
+DrawCommand CandleStickChartGenerator::generate(
     const std::string& seriesId,
     const std::vector<OhlcPoint>& data
 ) {
@@ -9,7 +9,6 @@ DrawCommand CandlestickChartGenerator::generate(
     cmd.type     = "drawSeries";
     cmd.pane     = "main";
     cmd.seriesId = seriesId;
-    cmd.style.type      = "candlestick";
     cmd.style.color     = "#00ff00";  // placeholder up‐candle color
     cmd.style.thickness = 1;          // px
 

@@ -56,6 +56,20 @@ if(NOT ASIO_INCLUDE_DIR)
     "  Expected to find asio.hpp under: ${THIRD_PARTY_DIR}/asio/include")
 endif()
 
+
+# ————————————————————————————————————————————————————————————————
+#  RapidJSON (header‐only)
+# ————————————————————————————————————————————————————————————————
+find_path(RAPIDJSON_INCLUDE_DIR
+  NAMES rapidjson/document.h
+  HINTS "${THIRD_PARTY_DIR}/rapidjson"
+)
+if(NOT RAPIDJSON_INCLUDE_DIR)
+  message(FATAL_ERROR
+    "Could NOT find RapidJSON headers!\n"
+    "  Expected rapidjson/document.h under: ${THIRD_PARTY_DIR}/rapidjson")
+endif()
+
 # ————————————————————————————————————————————————————————————————
 #  Threads
 # ————————————————————————————————————————————————————————————————
@@ -82,6 +96,7 @@ target_include_directories(chart_server PRIVATE
   ${CMAKE_SOURCE_DIR}/include/generators
   ${Boost_INCLUDE_DIRS}
   ${ASIO_INCLUDE_DIR}
+  ${RAPIDJSON_INCLUDE_DIR}
 )
 
 target_compile_definitions(chart_server PRIVATE

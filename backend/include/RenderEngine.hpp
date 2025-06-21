@@ -5,6 +5,9 @@
 #include <vector>
 #include <cstdint>
 #include "Protocol.hpp"
+#include "DrawCommand.hpp"
+
+using ChartingApp::DrawCommand;
 
 /// A single (timestamp, value) pair from sample_data.json
 struct DataPoint {

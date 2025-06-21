@@ -4,6 +4,10 @@
 #include <vector>
 #include "Protocol.hpp"
 #include "RenderEngine.hpp"
+#include "DrawCommand.hpp"
+
+
+using ChartingApp::DrawCommand;
 
 /**
  * Base class for all chart-series generators.

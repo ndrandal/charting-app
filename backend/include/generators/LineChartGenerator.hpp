@@ -1,15 +1,12 @@
-#include "generators/LineChartGenerator.hpp"
+#include <string>
+#include <vector>
+#include "ChartSeriesGenerator.hpp"
 #include "DrawCommand.hpp"
 
-DrawCommand LineChartGenerator::generate(const std::string& label, const std::vector<DataPoint>& data) {
-    DrawCommand cmd;
-    cmd.type = "line";
-    cmd.label = label;
+using ChartingApp::DrawCommand;
 
-    for (const auto& pt : data) {
-        cmd.timestamps.push_back(pt.timestamp);
-        cmd.values.push_back(pt.value);
-    }
-
-    return cmd;
-}
+class LineChartGenerator : public ChartSeriesGenerator {
+public:
+    DrawCommand generate(const std::string& seriesId, const std::vector<DataPoint>& data) override;
+    DrawCommand generate(const std::string& seriesId, const std::vector<OhlcPoint>& data) override;
+};
