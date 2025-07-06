@@ -1,17 +1,21 @@
-// backend/src/RenderEngine.cpp
+// RenderEngine.cpp
 
 #include "RenderEngine.hpp"
-#include "generators/ChartGeneratorFactory.hpp"  // ← new
+#include "generators/ChartGeneratorFactory.hpp"
 
 #include <fstream>
 #include <sstream>
-#include <rapidjson/document.h>
 #include <iostream>
 #include <algorithm>
 
-// ———————————————————————————————————————————————————————————
-// Load time/value JSON from disk (unchanged)
-// ———————————————————————————————————————————————————————————
+#include <rapidjson/document.h>
+#include <rapidjson/error/en.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
+
+using ChartingApp::DrawCommand;
+
+// Load time/value JSON from disk
 std::vector<DataPoint> RenderEngine::loadData(const std::string& filePath) {
     std::ifstream ifs(filePath);
     if (!ifs.is_open()) {
@@ -20,30 +24,31 @@ std::vector<DataPoint> RenderEngine::loadData(const std::string& filePath) {
     }
     std::stringstream buffer;
     buffer << ifs.rdbuf();
+    std::string jsonStr = buffer.str();
+
     rapidjson::Document doc;
     doc.Parse(jsonStr.c_str());
-
-    // 1) Syntax check
     if (doc.HasParseError()) {
         std::cerr << "[RenderEngine] JSON parse error at offset "
                   << doc.GetErrorOffset()
                   << ": "
                   << rapidjson::GetParseError_En(doc.GetParseError())
-                  << "\n";
+                  << std::endl;
         return {};
     }
-    // 2) Must be an array
     if (!doc.IsArray()) {
-        std::cerr << "[RenderEngine] Input JSON is not an array.\n";
+        std::cerr << "[RenderEngine] Input JSON is not an array." << std::endl;
         return {};
     }
-    // 3) Guard against empty array
-    if (doc.GetArray().Empty()) {
-        std::cerr << "[RenderEngine] Input JSON array is empty.\n";
+    const auto& arr = doc.GetArray();
+    if (arr.Empty()) {
+        std::cerr << "[RenderEngine] Input JSON array is empty." << std::endl;
         return {};
     }
-    out.reserve(doc.Size());
-    for (auto& v : doc.GetArray()) {
+
+    std::vector<DataPoint> out;
+    out.reserve(arr.Size());
+    for (const auto& v : arr) {
         if (!v.IsObject()) continue;
         DataPoint pt;
         pt.timestamp = v["timestamp"].GetInt64();
@@ -53,27 +58,20 @@ std::vector<DataPoint> RenderEngine::loadData(const std::string& filePath) {
     return out;
 }
 
-// ———————————————————————————————————————————————————————————
-// Refactored: use ChartGeneratorFactory to get the right generator
-// ———————————————————————————————————————————————————————————
+// Generate draw commands for a DataPoint vector
 std::vector<DrawCommand> RenderEngine::generateDrawCommands(
     const std::vector<DataPoint>& data
 ) const {
-    // Lookup the line-chart generator
     auto gen = ChartGeneratorFactory::create("line");
     if (!gen) {
-        std::cerr << "[RenderEngine] No generator registered for 'line'\n";
+        std::cerr << "[RenderEngine] No generator registered for 'line'" << std::endl;
         return {};
     }
-    // Generate a single DrawCommand for this series
     DrawCommand cmd = gen->generate("price", data);
-    // Wrap it in a vector for the caller
     return { std::move(cmd) };
 }
 
-// ———————————————————————————————————————————————————————————
-// Load OHLC JSON from disk (unchanged, if present)
-// ———————————————————————————————————————————————————————————
+// Load OHLC JSON from disk
 std::vector<OhlcPoint> RenderEngine::loadOhlcData(const std::string& filePath) {
     std::ifstream ifs(filePath);
     if (!ifs.is_open()) {
@@ -82,12 +80,18 @@ std::vector<OhlcPoint> RenderEngine::loadOhlcData(const std::string& filePath) {
     }
     std::stringstream buffer;
     buffer << ifs.rdbuf();
+    std::string jsonStr = buffer.str();
+
     rapidjson::Document doc;
-    doc.Parse(buffer.str().c_str());
+    doc.Parse(jsonStr.c_str());
+    if (doc.HasParseError() || !doc.IsArray()) {
+        std::cerr << "[RenderEngine] Invalid OHLC JSON input." << std::endl;
+        return {};
+    }
+    const auto& arr = doc.GetArray();
     std::vector<OhlcPoint> out;
-    if (!doc.IsArray()) return out;
-    out.reserve(doc.Size());
-    for (auto& v : doc.GetArray()) {
+    out.reserve(arr.Size());
+    for (const auto& v : arr) {
         if (!v.IsObject()) continue;
         OhlcPoint bar;
         bar.timestamp = v["timestamp"].GetInt64();
@@ -100,59 +104,56 @@ std::vector<OhlcPoint> RenderEngine::loadOhlcData(const std::string& filePath) {
     return out;
 }
 
-// ———————————————————————————————————————————————————————————
-// Refactored: use ChartGeneratorFactory for candlesticks
-// ———————————————————————————————————————————————————————————
+// Generate draw commands for OHLC data (candlestick)
 std::vector<DrawCommand> RenderEngine::generateOhlcDrawCommands(
     const std::vector<OhlcPoint>& data
 ) const {
-    // Lookup the candlestick-chart generator
     auto gen = ChartGeneratorFactory::create("candlestick");
     if (!gen) {
-        std::cerr << "[RenderEngine] No generator registered for 'candlestick'\n";
+        std::cerr << "[RenderEngine] No generator registered for 'candlestick'" << std::endl;
         return {};
     }
-    // Generate one DrawCommand for the OHLC series
     DrawCommand cmd = gen->generate("ohlc", data);
-    // Wrap it for the caller
     return { std::move(cmd) };
 }
 
-std::vector<ChartingApp::DrawCommand>
-ChartingApp::RenderEngine::generateIncrementalDrawCommands(
+// Incremental generation from `fromIndex` (0-based)
+std::vector<DrawCommand> RenderEngine::generateIncrementalDrawCommands(
     const std::string& seriesType,
     const std::string& jsonArrayStr,
-    size_t fromIndex)
-{
-    using namespace rapidjson;
-    // Parse JSON array
-    Document doc;
+    size_t fromIndex
+) {
+    rapidjson::Document doc;
     doc.Parse(jsonArrayStr.c_str());
     if (doc.HasParseError() || !doc.IsArray()) {
-        std::cerr << "[RenderEngine] Invalid JSON for incremental data\n";
+        std::cerr << "[RenderEngine] Invalid JSON for incremental data" << std::endl;
         return {};
     }
 
     const auto& arr = doc.GetArray();
-    size_t total = arr.Size();
-    if (fromIndex >= total) {
+    if (fromIndex >= arr.Size()) {
         // Nothing new
         return {};
     }
 
-    // Build a new rapidjson::Document containing only the tail slice
-    Document sliceDoc(kArrayType);
-    auto& alloc = sliceDoc.GetAllocator();
-    for (size_t i = fromIndex; i < total; ++i) {
-        sliceDoc.PushBack(arr[i], alloc);
+    // Parse only new DataPoints
+    std::vector<DataPoint> sliceData;
+    sliceData.reserve(arr.Size() - fromIndex);
+    for (size_t i = fromIndex; i < arr.Size(); ++i) {
+        const auto& v = arr[i];
+        if (!v.IsObject()) continue;
+        DataPoint pt;
+        pt.timestamp = v["timestamp"].GetInt64();
+        pt.value     = v["value"].GetDouble();
+        sliceData.push_back(pt);
     }
 
-    // Serialize sliceDoc back to string for reuse of existing logic
-    StringBuffer buf;
-    Writer<StringBuffer> writer(buf);
-    sliceDoc.Accept(writer);
-    std::string sliceJson = buf.GetString();
-
-    // Delegate to the full‐batch generator on this smaller slice
-    return generateDrawCommands(seriesType, sliceJson);
+    // Delegate to generator for this seriesType
+    auto gen = ChartGeneratorFactory::create(seriesType);
+    if (!gen) {
+        std::cerr << "[RenderEngine] No generator registered for '" << seriesType << "'" << std::endl;
+        return {};
+    }
+    DrawCommand cmd = gen->generate(seriesType, sliceData);
+    return { std::move(cmd) };
 }

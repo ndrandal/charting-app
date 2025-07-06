@@ -15,6 +15,9 @@
 #include <boost/asio/ip/tcp.hpp>
 #include <rapidjson/document.h> // for parsing subscribe/unsubscribe
 
+#include "rapidjson/stringbuffer.h"
+#include <rapidjson/writer.h>
+
 namespace beast     = boost::beast;
 namespace websocket = beast::websocket;
 namespace net       = boost::asio;
@@ -42,8 +45,8 @@ void do_session(tcp::socket socket) {
             req.Parse(msg.c_str());
             if (req.HasParseError() || !req.IsObject() ||
                 !req.HasMember("type") || !req["type"].IsString()) {
-                const char* err = R"({"type":"error","message":"Invalid JSON request"})";
-                ws.write(net::buffer(err));
+                const std::string err = R"({"type":"error","message":"Invalid JSON request"})";
+                ws.write(net::buffer(err)); 
                 continue;
             }
 
@@ -62,8 +65,8 @@ void do_session(tcp::socket socket) {
                 } else if (req.HasMember("seriesType") && req["seriesType"].IsString()) {
                     types.emplace_back(req["seriesType"].GetString());
                 } else {
-                    const char* err = R"({"type":"error","message":"Missing 'seriesType(s)' field"})";
-                    ws.write(net::buffer(err));
+                    const std::string err = R"({"type":"error","message":"Invalid JSON request"})";
+                    ws.write(net::buffer(err)); 
                     continue;
                 }
 
@@ -71,8 +74,8 @@ void do_session(tcp::socket socket) {
                 std::string dataFile = getEnvOr("DATA_FILE_PATH", "data/sample_data.json");
                 std::ifstream ifs(dataFile);
                 if (!ifs.is_open()) {
-                    const char* err = R"({"type":"error","message":"Cannot open data file"})";
-                    ws.write(net::buffer(err));
+                    const std::string err = R"({"type":"error","message":"Invalid JSON request"})";
+                    ws.write(net::buffer(err)); 
                     continue;
                 }
                 std::string jsonArray((std::istreambuf_iterator<char>(ifs)),
@@ -118,18 +121,21 @@ void do_session(tcp::socket socket) {
                 rapidjson::StringBuffer sb;
                 rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
                 resp.Accept(writer);
-                ws.write(net::buffer(sb.GetString()));
+                boost::system::error_code ec;
+                ws.write(net::buffer(sb.GetString(), sb.GetSize()), ec);
+                if(ec)
+    throw boost::system::system_error{ec};
             } else if (reqType == "unsubscribe") {
                 // Graceful close
                 ws.close(websocket::close_code::normal);
                 break;
 
             } else {
-                const char* err = R"({"type":"error","message":"Unknown request type"})";
-                ws.write(net::buffer(err));
+                const std::string err = R"({"type":"error","message":"Invalid JSON request"})";
+                ws.write(net::buffer(err)); 
             }
         }
-
+      }
     } catch (std::exception const& e) {
         std::cerr << "[WebSocket] Session error: " << e.what() << "\n";
     }

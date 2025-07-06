@@ -28,7 +28,7 @@ std::string Protocol::processRequest(
 
     // First, defer to RenderEngine: but it currently works only on valid arrays,
     // so we trust it returns empty vector on parse or logic errors.
-    auto commands = ChartingApp::RenderEngine::generateDrawCommands(chartType, jsonArrayStr);
+    auto commands = RenderEngine::generateIncrementalDrawCommands(chartType, jsonArrayStr, 0);
 
     // If empty and no commands, decide if it's an error or simply no data.
     // For simplicity, treat empty commands as valid (no data) rather than an error.
