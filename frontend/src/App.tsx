@@ -7,13 +7,14 @@ type SeriesType = 'line' | 'candlestick'
 
 const App: React.FC = () => {
   const [ws, setWs] = useState<WebSocket | null>(null)
-  const [connected, setConnected] = useState(false)
-  const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [seriesType, setSeriesType] = useState<SeriesType>('line')
   const [seriesTypes, setSeriesTypes] = useState<SeriesType[]>(['line'])
 
-  // Establish WebSocket & handle subscribe/unsubscribe
+  const [connected, setConnected] = useState(false)
+  // we can derive streaming = connected && seriesTypes.length>0
+  const streaming = connected && seriesTypes.length > 0
+
   useEffect(() => {
     const url = process.env.REACT_APP_WS_URL ?? 'ws://localhost:9001'
     const socket = new WebSocket(url)
@@ -21,17 +22,11 @@ const App: React.FC = () => {
     socket.onopen = () => {
       setConnected(true)
       setError(null)
-      // Immediately subscribe to the current seriesType
-    socket.send(JSON.stringify({
-      type: 'subscribe',
-      seriesTypes: seriesTypes  // send the whole array
-    }));
-      setStreaming(true)
+      // no subscribe here — we’ll handle it in the next effect
     }
 
     socket.onclose = () => {
       setConnected(false)
-      setStreaming(false)
       setError('WebSocket closed')
     }
 
@@ -46,7 +41,20 @@ const App: React.FC = () => {
       }
       socket.close()
     }
-  }, [seriesType])  // reconnect & resubscribe whenever seriesType changes
+  }, [])  // reconnect & resubscribe whenever seriesType changes
+
+
+  useEffect(() => {
+    if (ws && connected) {
+      // first unsubscribe from the old set
+      ws.send(JSON.stringify({ type: 'unsubscribe' }))
+      // then subscribe to the new array
+      ws.send(JSON.stringify({
+        type: 'subscribe',
+        seriesTypes
+      }))
+    }
+  }, [seriesTypes, ws, connected])
 
   const handleSeriesChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSeriesType(e.target.value as SeriesType)

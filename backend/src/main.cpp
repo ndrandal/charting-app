@@ -82,9 +82,10 @@ void do_session(tcp::socket socket) {
                                       std::istreambuf_iterator<char>());
 
                 // For each requested series, generate commands and collect
-                std::vector<ChartingApp::DrawCommand> allCmds;
+                std::vector<DrawCommand> allCmds;
                 for (auto& st : types) {
-                    auto cmds = ChartingApp::RenderEngine::generateDrawCommands(st, jsonArray);
+                    // call the real static overload you implemented
+                    auto cmds = RenderEngine::generateIncrementalDrawCommands(st, jsonArray, 0);
                     allCmds.insert(allCmds.end(), cmds.begin(), cmds.end());
                 }
 

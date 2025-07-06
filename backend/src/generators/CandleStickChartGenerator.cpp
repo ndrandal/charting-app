@@ -1,6 +1,14 @@
-#include "generators/CandleStickChartGenerator.hpp"
-#include <algorithm>
+// CandleStickChartGenerator.cpp
+// Handles OHLC data and simple DataPoint series for candlestick rendering
 
+#include "generators/CandleStickChartGenerator.hpp"
+#include "RenderEngine.hpp"  // for ChartingApp::DataPoint
+#include <algorithm>
+#include <cstdint>
+
+using ChartingApp::DrawCommand;
+
+// Generate candlestick from full OHLC data
 DrawCommand CandleStickChartGenerator::generate(
     const std::string& seriesId,
     const std::vector<OhlcPoint>& data
@@ -9,8 +17,8 @@ DrawCommand CandleStickChartGenerator::generate(
     cmd.type     = "drawSeries";
     cmd.pane     = "main";
     cmd.seriesId = seriesId;
-    cmd.style.color     = "#00ff00";  // placeholder up‐candle color
-    cmd.style.thickness = 1;          // px
+    cmd.style.color     = "#00ff00";
+    cmd.style.thickness = 1;
 
     // Compute ranges
     int64_t minT = data.front().timestamp, maxT = minT;
@@ -48,11 +56,11 @@ DrawCommand CandleStickChartGenerator::generate(
         cmd.vertices.push_back(x);
         cmd.vertices.push_back(yHigh);
 
-        // Candle body (2 horizontal lines)
+        // Candle body
         bool isUp = bar.close >= bar.open;
         float colorY1 = isUp ? yClose : yOpen;
         float colorY2 = isUp ? yOpen  : yClose;
-        float halfW   = 0.01f;  // body half‐width
+        float halfW   = 0.01f;
 
         // Top edge
         cmd.vertices.push_back(x - halfW);
@@ -67,4 +75,23 @@ DrawCommand CandleStickChartGenerator::generate(
     }
 
     return cmd;
+}
+
+// DataPoint overload: convert DataPoint to OhlcPoint and delegate
+DrawCommand CandleStickChartGenerator::generate(
+    const std::string& seriesId,
+    const std::vector<DataPoint>& data
+) {
+    std::vector<OhlcPoint> ohlc;
+    ohlc.reserve(data.size());
+    for (auto const& dp : data) {
+        ohlc.push_back(OhlcPoint{
+            dp.timestamp,
+            dp.value, // open
+            dp.value, // high
+            dp.value, // low
+            dp.value  // close
+        });
+    }
+    return generate(seriesId, ohlc);
 }
