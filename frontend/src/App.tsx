@@ -1,120 +1,135 @@
 // frontend/src/App.tsx
+import React, { useState, useEffect } from 'react';
+import ChartCanvas, { DataPoint } from './components/ChartCanvas';
 
-import React, { useState, useEffect } from 'react'
-import ChartCanvas from './components/ChartCanvas'
+// Supported series types
+type SeriesType = 'line' | 'candlestick';
 
-type SeriesType = 'line' | 'candlestick'
+const WS_URL = process.env.REACT_APP_WS_URL ?? 'ws://localhost:9001';
 
 const App: React.FC = () => {
-  const [ws, setWs] = useState<WebSocket | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [seriesType, setSeriesType] = useState<SeriesType>('line')
-  const [seriesTypes, setSeriesTypes] = useState<SeriesType[]>(['line'])
+  const [ws, setWs] = useState<WebSocket | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
 
-  const [connected, setConnected] = useState(false)
-  // we can derive streaming = connected && seriesTypes.length>0
-  const streaming = connected && seriesTypes.length > 0
+  // Allow user to choose which series types to request
+  const [seriesTypes, setSeriesTypes] = useState<SeriesType[]>(['line']);
 
+  // Data for ChartCanvas (only first series used)
+  const [data, setData] = useState<DataPoint[]>([]);
+
+  // Establish WebSocket connection once
   useEffect(() => {
-    const url = process.env.REACT_APP_WS_URL ?? 'ws://localhost:9001'
-    const socket = new WebSocket(url)
-
+    const socket = new WebSocket(WS_URL);
     socket.onopen = () => {
-      setConnected(true)
-      setError(null)
-      // no subscribe here — we’ll handle it in the next effect
-    }
-
+      setConnected(true);
+      setError(null);
+    };
     socket.onclose = () => {
-      setConnected(false)
-      setError('WebSocket closed')
-    }
-
-    socket.onerror = () => {
-      setError('WebSocket error')
-    }
-
-    setWs(socket)
+      setConnected(false);
+      setError('WebSocket closed');
+    };
+    socket.onerror = () => setError('WebSocket error');
+    setWs(socket);
     return () => {
       if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'unsubscribe' }))
+        socket.send(JSON.stringify({ type: 'unsubscribe' }));
       }
-      socket.close()
-    }
-  }, [])  // reconnect & resubscribe whenever seriesType changes
+      socket.close();
+    };
+  }, []);
 
-
+  // Subscribe/unsubscribe and handle incoming messages
   useEffect(() => {
-    if (ws && connected) {
-      // first unsubscribe from the old set
-      ws.send(JSON.stringify({ type: 'unsubscribe' }))
-      // then subscribe to the new array
-      ws.send(JSON.stringify({
-        type: 'subscribe',
-        seriesTypes
-      }))
-    }
-  }, [seriesTypes, ws, connected])
+    if (!ws || !connected) return;
+    // Clean up prior handler
+    ws.onmessage = null;
 
-  const handleSeriesChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSeriesType(e.target.value as SeriesType)
-    // The effect above will handle sending unsubscribe + new subscribe
-  }
+    // Subscribe to selected series types
+    ws.send(JSON.stringify({ type: 'unsubscribe' }));
+    ws.send(
+      JSON.stringify({ type: 'subscribe', seriesTypes })
+    );
+
+    // Handle incoming drawCommands
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'drawCommands' && Array.isArray(msg.commands)) {
+          // Convert all commands' vertices into DataPoint[]
+          const pts: DataPoint[] = [];
+          msg.commands.forEach((cmd: any) => {
+            if (Array.isArray(cmd.vertices)) {
+              for (let i = 0; i < cmd.vertices.length; i += 2) {
+                const x = cmd.vertices[i];
+                const y = cmd.vertices[i+1];
+                pts.push({ x, y });
+              }
+            }
+          });
+          setData(pts);
+        }
+      } catch (e) {
+        console.error('Failed to parse WebSocket message', e);
+      }
+    };
+
+    // Cleanup on seriesTypes change or unmount
+    return () => {
+      ws.send(JSON.stringify({ type: 'unsubscribe' }));
+      ws.onmessage = null;
+    };
+  }, [ws, connected, seriesTypes]);
+
+  // Toggle checkboxes
+  const toggleSeries = (type: SeriesType) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = e.target.checked;
+    setSeriesTypes(prev =>
+      checked ? [...prev, type] : prev.filter(t => t !== type)
+    );
+  };
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: 20, fontFamily: 'sans-serif' }}>
       <h1>Charting App</h1>
 
       <div style={{ marginBottom: 12 }}>
+        <label style={{ marginRight: 8 }}>Series:</label>
+        <label style={{ marginRight: 8 }}>
+          <input
+            type="checkbox"
+            checked={seriesTypes.includes('line')}
+            onChange={toggleSeries('line')}
+          />{' '}
+          Line
+        </label>
         <label>
-          Chart type:&nbsp;
-          <div style={{ marginBottom: 12 }}>
-            <label>
-              <input
-                type="checkbox"
-                value="line"
-                checked={seriesTypes.includes('line')}
-                onChange={e => {
-                  const checked = e.target.checked;
-                  setSeriesTypes(prev =>
-                    checked
-                      ? [...prev, 'line']
-                      : prev.filter(s => s !== 'line')
-                  );
-                }}
-              />{' '}
-              Line
-            </label>
-            {' '}
-            <label>
-              <input
-                type="checkbox"
-                value="candlestick"
-                checked={seriesTypes.includes('candlestick')}
-                onChange={e => {
-                  const checked = e.target.checked;
-                  setSeriesTypes(prev =>
-                    checked
-                      ? [...prev, 'candlestick']
-                      : prev.filter(s => s !== 'candlestick')
-                  );
-                }}
-              />{' '}
-              Candlestick
-            </label>
-          </div>
+          <input
+            type="checkbox"
+            checked={seriesTypes.includes('candlestick')}
+            onChange={toggleSeries('candlestick')}
+          />{' '}
+          Candlestick
         </label>
       </div>
 
-      {!connected && <p>Connecting to {process.env.REACT_APP_WS_URL}…</p>}
+      {!connected && <p>Connecting to {WS_URL}…</p>}
       {error && <p style={{ color: 'red' }}>Error: {error}</p>}
 
-      {/* Only render the canvas when we have a live WebSocket */}
-      {ws && connected && (
-        <ChartCanvas ws={ws} streaming={streaming} />
+      {connected && (
+        <ChartCanvas
+          width={800}
+          height={400}
+          data={data}
+          title={seriesTypes.join(', ').toUpperCase()}
+          xLabel="X"
+          yLabel="Y"
+          smooth={true}
+          smoothSegments={5}
+        />
       )}
     </div>
-  )
-}
+  );
+};
 
-export default App
+export default App;
