@@ -124,7 +124,7 @@ const App: React.FC = () => {
           title={seriesTypes.join(', ').toUpperCase()}
           xLabel="X"
           yLabel="Y"
-          smooth={true}
+          smooth={false}
           smoothSegments={5}
         />
       )}
