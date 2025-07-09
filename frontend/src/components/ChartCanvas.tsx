@@ -2,6 +2,7 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { linearScale, niceTicks } from '../utils/scale';
 import { determineTimeUnit, generateTimeTicks, formatTimeTick } from '../utils/time';
+import { useTheme } from '../ThemeProvider';
 
 export interface DataPoint { x: number; y: number; }
 
@@ -14,30 +15,9 @@ export interface ChartCanvasProps {
   yLabel?: string;
   margin?: { top: number; right: number; bottom: number; left: number };
   tickCount?: number;
-  theme?: Partial<{
-    axisColor: string;
-    gridColor: string;
-    labelColor: string;
-    strokeColor: string;
-    strokeWidth: number;
-    fontFamily: string;
-    fontSize: number;
-    titleFontSize: number;
-  }>;
   smooth?: boolean;
   smoothSegments?: number;
 }
-
-const defaultTheme = {
-  axisColor:   '#333',
-  gridColor:   '#eee',
-  labelColor:  '#333',
-  strokeColor: '#007acc',
-  strokeWidth: 2,
-  fontFamily:  'sans-serif',
-  fontSize:    10,
-  titleFontSize: 14,
-};
 
 // Catmull–Rom spline for smoothing
 function catmullRom(p0:number,p1:number,p2:number,p3:number,t:number) {
@@ -82,11 +62,11 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   title, xLabel, yLabel,
   margin = { top:30, right:20, bottom:40, left:50 },
   tickCount = 5,
-  theme = {},
   smooth = false,
   smoothSegments = 10,
 }) => {
-  const cfg = { ...defaultTheme, ...theme };
+  const contextTheme = useTheme();
+  const cfg  = { ...contextTheme};
   const { axisColor, gridColor, labelColor, strokeColor, strokeWidth, fontFamily, fontSize, titleFontSize } = cfg;
 
   const innerWidth  = width  - margin.left - margin.right;
