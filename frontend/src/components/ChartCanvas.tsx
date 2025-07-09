@@ -106,7 +106,7 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   // pan & state
   const containerRef = useRef<HTMLDivElement>(null);
   const panRef = useRef<{ startX:number; startY:number; xDomain:[number,number]; yDomain:[number,number]; mode:'x'|'y' }|null>(null);
-
+  const zoomRef = useRef<{ axis: 'x'|'y'; startPos: number; startDomain: [number,number] }|null>(null);
   // optionally smooth
   const plotData = useMemo(() => (
     smooth ? generateSmoothedData(data, smoothSegments!) : data
@@ -132,7 +132,8 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   const bufRef  = useRef<WebGLBuffer|null>(null);
 
   // hover
-  const [hover, setHover] = useState<{ index:number; cx:number; cy:number; screenX:number; screenY:number }|null>(null);
+  const [hover, setHover] = useState<{ index:number; cx:number; cy:number; screenX:number; screenY:number; xVal: number; yVal: number; }|null>(null);
+  const [axisHover, setAxisHover] = useState<'x' | 'y' | null>(null);
 
   // draw line
   useEffect(() => {
@@ -190,16 +191,46 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   };
 
   // pan (drag)
-  const onMouseDown = (e: React.MouseEvent) => {
-    const rect = containerRef.current!.getBoundingClientRect();
-    panRef.current = {
-      startX: e.clientX - rect.left,
-      startY: e.clientY - rect.top,
-      xDomain: viewX,
-      yDomain: viewY,
-      mode: e.shiftKey ? 'y' : 'x'
+const onMouseDown = (e: React.MouseEvent) => {
+  const rect = containerRef.current!.getBoundingClientRect();
+  const absX = e.clientX - rect.left;   // pixel X within the whole container
+  const absY = e.clientY - rect.top;    // pixel Y within the whole container
+
+  // 1) X-axis zoom if we're anywhere in the bottom margin:
+  //    That is, below the chart area (margin.top + innerHeight)
+  if (absY > margin.top + innerHeight && absY < height) {
+    // start X-zoom using the mouse’s chart-relative X
+    zoomRef.current = {
+      axis:     'x',
+      startPos: absX - margin.left,
+      startDomain: viewX
     };
+    return;
+  }
+
+  // 2) Y-axis zoom if we're anywhere in the left margin:
+  //    That is, to the left of the chart area (absX < margin.left)
+  if (absX < margin.left && absX > 0) {
+    // start Y-zoom using the mouse’s chart-relative Y
+    zoomRef.current = {
+      axis:     'y',
+      startPos: absY - margin.top,
+      startDomain: viewY
+    };
+    return;
+  }
+
+  // 3) Otherwise fall back to panning
+  panRef.current = {
+    startX: absX,
+    startY: absY,
+    xDomain: viewX,
+    yDomain: viewY,
+    mode: e.shiftKey ? 'y' : 'x'
   };
+};
+
+
   const onMouseMoveSvg = (e: React.MouseEvent) => {
     if (!panRef.current) return;
     const { startX, startY, xDomain, yDomain, mode } = panRef.current;
@@ -214,27 +245,121 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
       setViewY([ yDomain[0]+shiftY, yDomain[1]+shiftY ]);
     }
   };
-  const onMouseUp = () => { panRef.current = null; };
+  const onMouseUp = () => {
+   panRef.current = null;
+   zoomRef.current = null;
+  };
   useEffect(()=>{ window.addEventListener('mouseup', onMouseUp); return()=>window.removeEventListener('mouseup', onMouseUp); },[]);
+
+  const handleAxisZoom = (e: React.MouseEvent) => {
+    const zr = zoomRef.current!;
+    const rect = containerRef.current!.getBoundingClientRect();
+    const absX = e.clientX - rect.left;
+    const absY = e.clientY - rect.top;
+    const lx = absX - margin.left;
+    const ly = absY - margin.top;
+
+    const currentPos = zr.axis === 'x' ? lx : ly;
+    const length     = zr.axis === 'x' ? innerWidth : innerHeight;
+    let   delta      = (currentPos - zr.startPos) / length;
+
+    // flip for Y so pulling down expands
+    if (zr.axis === 'y') delta = -delta;
+
+    const [d0, d1] = zr.startDomain;
+    const range    = d1 - d0;
+
+    // compute raw new bounds
+    let newStart = d0 + delta * range;
+    let newEnd   = d1 - delta * range;
+
+    // enforce a tiny minimum span (1e-6 × rawSpan)
+    const rawSpan    = zr.axis === 'x' ? (rawXMax - rawXMin) : (rawYMax - rawYMin);
+    const minSpan    = rawSpan * 1e-6;
+    if (newEnd - newStart < minSpan) {
+      const center = (newStart + newEnd) / 2;
+      newStart = center - minSpan/2;
+      newEnd   = center + minSpan/2;
+    }
+
+    // clamp back to data extents
+   if (zr.axis === 'x') {
+     setViewX([ newStart, newEnd ]);
+   } else {
+     setViewY([ newStart, newEnd ]);
+   }
+  };
+
+
+
 
   // hover
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (panRef.current) { onMouseMoveSvg(e); return; }
+    if (zoomRef.current) { handleAxisZoom(e); return; }
+    if (panRef.current)  { onMouseMoveSvg(e); return; }
     const rect = containerRef.current!.getBoundingClientRect();
     const lx = e.clientX - rect.left - margin.left;
-    const ly = e.clientY - rect.top - margin.top;
-    if (lx<0||lx>innerWidth||ly<0||ly>innerHeight) { setHover(null); return; }
+    const ly = e.clientY - rect.top  - margin.top;
+
+    const absX = e.clientX - rect.left;
+    const absY = e.clientY - rect.top;
+
+    // only when not already dragging/panning
+    if (!panRef.current && !zoomRef.current) {
+      // bottom margin = X-axis
+      if (absY > margin.top + innerHeight && absY < height) {
+        setAxisHover('x');
+      }
+      // left margin = Y-axis
+      else if (absX < margin.left && absX > 0) {
+        setAxisHover('y');
+      }
+      else {
+        setAxisHover(null);
+      }
+    }
+    
+    if (lx<0||lx>innerWidth||ly<0||ly>innerHeight) {
+      setHover(null);
+      return;
+    }
+
+    // nearest-data-index for optional tooltip use
     const dataX = viewX[0] + (lx/innerWidth)*(viewX[1]-viewX[0]);
-    let best=Infinity,idx=0;
-    plotData.forEach((d,i)=>{ const dist=Math.abs(d.x-dataX); if(dist<best){best=dist;idx=i;} });
-    const dpt = plotData[idx];
-    setHover({ index:idx, cx:xScale(dpt.x), cy:yScale(dpt.y), screenX:e.clientX, screenY:e.clientY });
+    let best = Infinity, idx = 0;
+    plotData.forEach((d,i) => {
+      const dist = Math.abs(d.x - dataX);
+      if (dist < best) { best = dist; idx = i; }
+    });
+
+    // compute data units under the cursor
+    const xValue = viewX[0] + (lx/innerWidth)*(viewX[1]-viewX[0]);
+    const yValue = viewY[1] - (ly/innerHeight)*(viewY[1]-viewY[0]);
+
+    setHover({
+      index:   idx,
+      cx:      lx,
+      cy:      ly,
+      xVal:    xValue,
+      yVal:    yValue,
+      screenX: e.clientX,
+      screenY: e.clientY,
+    });
   };
+
 
   return (
     <div
       ref={containerRef}
-      style={{ position:'relative', width, height, cursor: panRef.current?'grabbing':'grab' }}
+      style={{ position:'relative', width, height, cursor: panRef.current
+         ? 'grabbing'
+         : zoomRef.current
+           ? (zoomRef.current.axis === 'x' ? 'ew-resize' : 'ns-resize')
+           : (axisHover === 'x'
+               ? 'ew-resize'
+               : axisHover === 'y'
+                 ? 'ns-resize'
+                 : 'crosshair') }}
       onWheel={onWheel}
       onMouseDown={onMouseDown}
       onMouseMove={handleMouseMove}
@@ -264,13 +389,72 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
           <line x1={0} y1={0} x2={0} y2={innerHeight} stroke={axisColor}/>
           {xLabel && <text x={innerWidth/2} y={innerHeight+margin.bottom-fontSize/2} textAnchor='middle' fontFamily={fontFamily} fontSize={fontSize} fill={labelColor}>{xLabel}</text>}
           {yLabel && <text transform={`translate(${-margin.left+fontSize/2},${innerHeight/2}) rotate(-90)`} textAnchor='middle' fontFamily={fontFamily} fontSize={fontSize} fill={labelColor}>{yLabel}</text>}
-          {hover && <><line x1={hover.cx} y1={0} x2={hover.cx} y2={innerHeight} stroke={axisColor} strokeDasharray='4 2'/><circle cx={hover.cx} cy={hover.cy} r={4} fill={strokeColor} stroke='#fff' strokeWidth={1}/></>}
+          {hover && (
+            <>
+              {/* vertical crosshair */}
+              <line
+                x1={hover.cx} y1={0}
+                x2={hover.cx} y2={innerHeight}
+                stroke={axisColor}
+                strokeDasharray="4 2"
+              />
+              {/* horizontal crosshair */}
+              <line
+                x1={0}        y1={hover.cy}
+                x2={innerWidth} y2={hover.cy}
+                stroke={axisColor}
+                strokeDasharray="4 2"
+              />
+
+              {/* X-axis tag */}
+              <g>
+                <rect
+                  x={Math.max(hover.cx - 30, 0)}
+                  y={innerHeight + 4}
+                  width={60}
+                  height={20}
+                  fill={axisColor}
+                  rx={3}
+                  ry={3}
+                />
+                <text
+                  x={hover.cx}
+                  y={innerHeight + 4 + 14}
+                  textAnchor="middle"
+                  fontFamily={fontFamily}
+                  fontSize={fontSize}
+                  fill={labelColor}
+                >
+                  {formatTimeTick(hover.xVal, timeUnit)}
+                </text>
+              </g>
+
+              {/* Y-axis tag */}
+              <g>
+                <rect
+                  x={-margin.left + 4}
+                  y={Math.max(hover.cy - 10, 0)}
+                  width={margin.left - 8}
+                  height={20}
+                  fill={axisColor}
+                  rx={3}
+                  ry={3}
+                />
+                <text
+                  x={-margin.left/2}
+                  y={hover.cy + 4}
+                  textAnchor="middle"
+                  fontFamily={fontFamily}
+                  fontSize={fontSize}
+                  fill={labelColor}
+                >
+                  {hover.yVal.toFixed(2)}
+                </text>
+              </g>
+            </>
+          )}
         </g>
       </svg>
-      {hover && <div style={{position:'fixed', left:hover.screenX+10, top:hover.screenY+10, background:'#fff', border:'1px solid #ccc', padding:'4px 8px', pointerEvents:'none', fontSize, fontFamily, color:labelColor, borderRadius:3, boxShadow:'0 1px 3px rgba(0,0,0,0.2)', whiteSpace:'nowrap'}}>
-        <div><strong>x:</strong> {formatTimeTick(xTicks[hover.index], timeUnit)}</div>
-        <div><strong>y:</strong> {plotData[hover.index].y}</div>
-      </div>}
     </div>
   );
 };
