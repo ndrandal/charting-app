@@ -1,24 +1,32 @@
 // src/theme.ts
 
 export interface Theme {
-  axisColor: string;
-  gridColor: string;
-  labelColor: string;
-  strokeColor: string;
-  strokeWidth: number;
-  fontFamily: string;
-  fontSize: number;
-  titleFontSize: number;
-  // later you can add gridMajorColor, bandOpacity, etc.
+  axisColor:        string;
+  gridMajorColor:   string;   // darker grid lines
+  gridMinorColor:   string;   // lighter grid lines
+  gridBandOpacity:  number;   // for alternating bands
+  labelColor:       string;
+  strokeColor:      string;
+  strokeWidth:      number;
+  fontFamily:       string;
+  fontSize:         number;
+  titleFontSize:    number;
+  plotBackground: string;
+  containerBackground: string;
 }
 
 export const defaultTheme: Theme = {
-  axisColor:    '#333',
-  gridColor:    '#eee',
-  labelColor:   '#333',
-  strokeColor:  '#007acc',
-  strokeWidth:  2,
-  fontFamily:   'sans-serif',
-  fontSize:     10,
-  titleFontSize:14,
-};
+  containerBackground: "#282C34",
+  plotBackground:      "#21252B",
+  axisColor:           "#ABB2BF",
+  gridMajorColor:      "#5C6370",
+  gridMinorColor:      "#3E4451",
+  gridBandOpacity:     0.04,
+  labelColor:          "#828997",
+  strokeColor:         "#61AFEF",  // sky-blue line
+  strokeWidth:         2,
+  fontFamily:          "sans-serif",
+  fontSize:            10,
+  titleFontSize:       14,
+}
+
