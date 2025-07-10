@@ -40,21 +40,11 @@ DrawCommand LineChartGenerator::generate(
     double minV = minVIt->close;
     double maxV = maxVIt->close;
 
-    double tRange = double(maxT - minT);
-    double vRange = maxV - minV;
-
     cmd.vertices.reserve(data.size() * 2);
     for (auto const& pt : data) {
-        float x = tRange > 0
-            ? float(((pt.timestamp - minT) / tRange) * 2.0 - 1.0)
-            : 0.0f;
-        float y = vRange > 0
-            ? float(((pt.close - minV) / vRange) * 2.0 - 1.0)
-            : 0.0f;
-        cmd.vertices.push_back(x);
-        cmd.vertices.push_back(y);
+        cmd.vertices.push_back(static_cast<float>(pt.timestamp));
+        cmd.vertices.push_back(static_cast<float>(pt.close));
     }
-
     return cmd;
 }
 
