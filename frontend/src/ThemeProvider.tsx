@@ -1,21 +1,40 @@
-// src/ThemeProvider.tsx
-import React, { createContext, useContext, ReactNode } from 'react'
-import { Theme, defaultTheme } from './theme'
+import React, { useEffect } from 'react';
+import { tokens } from './theme';
 
-interface ThemeProviderProps {
-  themeOverrides?: Partial<Theme>;
-  children: ReactNode;      // ← explicitly declared
-}
+const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  useEffect(() => {
+    const root = document.documentElement.style;
 
-const ThemeContext = createContext<Theme>(defaultTheme);
+    // Colors
+    root.setProperty('--color-ghostWhite', tokens.color.ghostWhite);
+    root.setProperty('--color-iceBlue',   tokens.color.iceBlue);
+    root.setProperty('--color-amber',     tokens.color.amber);
 
-export function ThemeProvider({ themeOverrides = {}, children }: ThemeProviderProps) {
-  const merged: Theme = { ...defaultTheme, ...themeOverrides };
-  return (
-    <ThemeContext.Provider value={merged}>
-      {children}
-    </ThemeContext.Provider>
-  );
-}
+    // Opacities
+    root.setProperty('--opacity-glassLight', tokens.opacity.glassLight.toString());
+    root.setProperty('--opacity-glassDark',  tokens.opacity.glassDark.toString());
 
-export const useTheme = () => useContext(ThemeContext);
+    // Blurs
+    Object.entries(tokens.blur).forEach(([key, val]) =>
+      root.setProperty(`--blur-${key}`, val)
+    );
+
+    // Shadows
+    Object.entries(tokens.shadow).forEach(([key, val]) =>
+      root.setProperty(`--shadow-${key}`, val)
+    );
+
+    // Typography
+    root.setProperty('--font-family', tokens.typography.fontFamily);
+    Object.entries(tokens.typography.fontSize).forEach(([key, fs]) =>
+      root.setProperty(`--font-size-${key}`, fs)
+    );
+    Object.entries(tokens.typography.lineHeight).forEach(([key, lh]) =>
+      root.setProperty(`--line-height-${key}`, lh)
+    );
+  }, []);
+
+  return <>{children}</>;
+};
+
+export default ThemeProvider;

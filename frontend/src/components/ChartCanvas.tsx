@@ -6,7 +6,6 @@ import {
   generateTimeTicks,
   formatTimeTick
 } from '../utils/time';
-import { useResizeObserver } from '../hooks/useResizeObserver';
 import { useTheme } from '../ThemeProvider';
 
 export interface DataPoint { x: number; y: number; }
