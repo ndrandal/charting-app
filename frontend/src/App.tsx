@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import ChartCanvas, { DataPoint } from './components/ChartCanvas';
 import { ThemeProvider } from './ThemeProvider';
+import ResizableChart, { DataPoint } from './components/ResizableChart';
+import ChartSubscriber from './components/ChartSubscriber';
+
 
 // Supported series types
 type SeriesType = 'line' | 'candlestick';
@@ -15,6 +17,9 @@ const App: React.FC = () => {
   // Allow user to choose which series types to request
   const [seriesTypes, setSeriesTypes] = useState<SeriesType[]>(['line']);
   const [data, setData] = useState<DataPoint[]>([]);
+
+  type ChartSlot = { id: SeriesType };
+  const chartSlots: ChartSlot[] = seriesTypes.map(type => ({ id: type }));
 
   // WebSocket lifecycle
   useEffect(() => {
@@ -65,58 +70,72 @@ const App: React.FC = () => {
   };
 
   return (
-    <ThemeProvider>
-      <div
-        style={{
-          padding: 20,
-          fontFamily: 'sans-serif',
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100vh',
-          gap: 12,
-        }}
-      >
-        <h1>Charting App</h1>
+  <ThemeProvider>
+    <div
+      style={{
+        padding: 20,
+        fontFamily: 'sans-serif',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        gap: 12,
+      }}
+    >
+      <h1>Charting App</h1>
 
-        {/* series checkboxes */}
-        <div>
-          <label style={{ marginRight: 8 }}>Series:</label>
-          <label style={{ marginRight: 8 }}>
-            <input
-              type="checkbox"
-              checked={seriesTypes.includes('line')}
-              onChange={toggleSeries('line')}
-            /> Line
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={seriesTypes.includes('candlestick')}
-              onChange={toggleSeries('candlestick')}
-            /> Candlestick
-          </label>
-        </div>
+      {/* series checkboxes */}
+      <div>
+        <label style={{ marginRight: 8 }}>Series:</label>
+        <label style={{ marginRight: 8 }}>
+          <input
+            type="checkbox"
+            checked={seriesTypes.includes('line')}
+            onChange={toggleSeries('line')}
+          />{' '}
+          Line
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={seriesTypes.includes('candlestick')}
+            onChange={toggleSeries('candlestick')}
+          />{' '}
+          Candlestick
+        </label>
+      </div>
 
-        {error && <p style={{ color: 'red' }}>Error: {error}</p>}
-        {!connected && <p>Connecting to {WS_URL}…</p>}
+      {/* error or connecting status */}
+      {error && <p style={{ color: 'red' }}>Error: {error}</p>}
+      {!connected && <p>Connecting to {WS_URL}&hellip;</p>}
 
-        {/* responsive chart container */}
-        <div style={{ flexGrow: 1, minHeight: 0 }}>
-          {connected && (
-            <ChartCanvas
+      {/* multi‐chart grid */}
+      {connected && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: '12px',
+            flexGrow: 1,
+            minHeight: 0,
+          }}
+        >
+          {chartSlots.map((slot) => (
+            <ResizableChart
+              key={slot.id}
               data={data}
-              title={seriesTypes.join(', ').toUpperCase()}
+              title={slot.id.toUpperCase()}
               xLabel="Time"
               yLabel="Price"
               margin={{ top: 30, right: 40, bottom: 40, left: 40 }}
               smooth={false}
               smoothSegments={5}
             />
-          )}
+          ))}
         </div>
-      </div>
-    </ThemeProvider>
-  );
+      )}
+    </div>
+  </ThemeProvider>
+);
 };
 
 export default App;

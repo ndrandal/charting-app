@@ -8,9 +8,10 @@ import {
 } from '../utils/time';
 import { useResizeObserver } from '../hooks/useResizeObserver';
 import { useTheme } from '../ThemeProvider';
-
-export interface DataPoint { x: number; y: number; }
+import { DataPoint} from './ResizableChart'
 export interface ChartCanvasProps {
+  width: number;
+  height: number;
   data: DataPoint[];
   title?: string;
   xLabel?: string;
@@ -58,6 +59,8 @@ function hexToRgba(hex:string):[number,number,number,number] {
 }
 
 const ChartCanvas: React.FC<ChartCanvasProps> = ({
+  width,
+  height,
   data,
   title,
   xLabel,
@@ -72,8 +75,6 @@ const ChartCanvas: React.FC<ChartCanvasProps> = ({
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const progRef      = useRef<WebGLProgram|null>(null);
   const bufRef       = useRef<WebGLBuffer|null>(null);
-
-  const { width, height } = useResizeObserver(containerRef);
   const {
     containerBackground,
     plotBackground,
